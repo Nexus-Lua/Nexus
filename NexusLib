@@ -153,7 +153,7 @@ end
 -----------------------------------------------------------
 -- Adding a Section to a Tab
 -----------------------------------------------------------
-function NexusLib.Tab:AddSection(title)
+function NexusLib:AddSection(title)
     local section = {
         Title = title,
         Elements = {}
