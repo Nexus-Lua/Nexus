@@ -3,7 +3,7 @@ NexusLib.__index = NexusLib
 
 -- Services
 local TweenService = game:GetService("TweenService")
-local UserInputService = game:GetService("User InputService")
+local UserInputService = game:GetService("UserInputService")
 local HttpService = game:GetService("HttpService")
 
 -- Themes
