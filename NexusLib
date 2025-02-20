@@ -153,33 +153,61 @@ end
 -----------------------------------------------------------
 -- Adding a Section to a Tab
 -----------------------------------------------------------
-function NexusLib.Tab:AddSection(title)
-    local section = {
-        Title = title,
-        Elements = {}
+function NexusLib:AddTab(name)
+    local tab = {
+        Name = name,
+        Sections = {},
+        AddSection = function(self, title)
+            local section = {
+                Title = title,
+                Elements = {}
+            }
+
+            section.Container = CreateInstance("Frame", {
+                Size = UDim2.new(1, -10, 0, 0),
+                BackgroundTransparency = 1,
+                Parent = self.Content
+            })
+
+            CreateInstance("TextLabel", {
+                Text = title,
+                Font = Enum.Font.GothamSemibold,
+                TextColor3 = themes.Text,
+                Size = UDim2.new(1, 0, 0, 25),
+                Parent = section.Container
+            })
+
+            CreateInstance("UIListLayout", {
+                Padding = UDim.new(0, 8),
+                Parent = section.Container
+            })
+
+            table.insert(self.Sections, section)
+            return section
+        end
     }
 
-    section.Container = CreateInstance("Frame", {
-        Size = UDim2.new(1, -10, 0, 0),
-        BackgroundTransparency = 1,
-        Parent = self.Content
-    })
-
-    CreateInstance("TextLabel", {
-        Text = title,
-        Font = Enum.Font.GothamSemibold,
+    local tabButton = CreateInstance("TextButton", {
+        Text = name,
+        Size = UDim2.new(0, 120, 0, 30),
+        BackgroundColor3 = themes.Secondary,
         TextColor3 = themes.Text,
-        Size = UDim2.new(1, 0, 0, 25),
-        Parent = section.Container
+        Parent = self.TabContainer
     })
 
-    CreateInstance("UIListLayout", {
-        Padding = UDim.new(0, 8),
-        Parent = section.Container
+    tab.Content = CreateInstance("ScrollingFrame", {
+        Size = UDim2.new(1, -20, 1, -50),
+        Position = UDim2.new(0, 10, 0, 40),
+        Visible = false,
+        Parent = self.MainFrame
     })
 
-    table.insert(self.Sections, section)
-    return section
+    table.insert(self.Tabs, tab)
+    if not self.CurrentTab then
+        self:SwitchTab(tab)
+    end
+
+    return tab
 end
 
 -----------------------------------------------------------
