@@ -3,15 +3,15 @@ NexusLib.__index = NexusLib
 
 -- Services
 local TweenService = game:GetService("TweenService")
-local UserInputService = game:GetService("UserInputService")
+local UserInputService = game:GetService("User InputService")
 local HttpService = game:GetService("HttpService")
 
 -- Themes
 local themes = {
-    Primary = Color3.fromRGB(28, 28, 38),
-    Secondary = Color3.fromRGB(45, 45, 60),
-    Accent = Color3.fromRGB(85, 170, 255),
-    Text = Color3.fromRGB(255, 255, 255)
+    Primary = Color3.fromRGB(10, 10, 10),
+    Secondary = Color3.fromRGB(20, 20, 20),
+    Accent = Color3.fromRGB(50, 50, 50),
+    Text = Color3.fromRGB(200, 200, 200)
 }
 
 -- Animation Settings
@@ -80,8 +80,8 @@ function NexusLib.new(title)
     
     self.Main = Create("Frame", {
         Name = "Main",
-        Size = UDim2.new(0, 500, 0, 400),
-        Position = UDim2.new(0.5, -250, 0.5, -200),
+        Size = UDim2.new(0, 400, 0, 300),
+        Position = UDim2.new(0.5, -200, 0.5, -150),
         BackgroundColor3 = themes.Primary,
         BackgroundTransparency = 1,
         Parent = self.GUI
@@ -90,7 +90,7 @@ function NexusLib.new(title)
     -- Entrance Animation
     Animate(self.Main, {
         BackgroundTransparency = 0,
-        Position = UDim2.new(0.5, -250, 0.5, -200)
+        Position = UDim2.new(0.5, -200, 0.5, -150)
     }, 0.3, Enum.EasingStyle.Back)
     
     Create("UICorner", {
@@ -150,7 +150,7 @@ function NexusLib.new(title)
     -- Close Button
     local closeButton = Create("TextButton", {
         Size = UDim2.new(0, 20, 0, 20),
-        Position = UDim2.new(1, -25, 0, 5),
+        Position = UDim2.new(1, -50, 0, 5),
         BackgroundColor3 = Color3.fromRGB(255, 95, 95),
         Text = "",
         Parent = self.TitleBar
@@ -164,12 +164,60 @@ function NexusLib.new(title)
     closeButton.MouseButton1Click:Connect(function()
         Animate(self.Main, {
             BackgroundTransparency = 1,
-            Position = UDim2.new(0.5, -250, 0.6, -200)
+            Position = UDim2.new(0.5, -200, 0.6, -150)
         }, 0.3, Enum.EasingStyle.Back, Enum.EasingDirection.In)
         wait(0.3)
         self.GUI:Destroy()
     end)
+
+    -- Minimize Button
+    local minimizeButton = Create("TextButton", {
+        Size = UDim2.new(0, 20, 0, 20),
+        Position = UDim2.new(1, -25, 0, 5),
+        BackgroundColor3 = Color3.fromRGB(255, 255, 0),
+        Text = "",
+        Parent = self.TitleBar
+    })
     
+    Create("UICorner", {
+        CornerRadius = UDim.new(1, 0),
+        Parent = minimizeButton
+    })
+    
+    minimizeButton.MouseButton1Click:Connect(function()
+        Animate(self.Main, {
+            BackgroundTransparency = 1,
+            Size = UDim2.new(0, 400, 0, 30),
+            Position = UDim2.new(0.5, -200, 0.5, -150)
+        }, 0.3, Enum.EasingStyle.Back, Enum.EasingDirection.In)
+    end)
+
+    -- Draggable UI
+    local dragging = false
+    local dragStart = nil
+    local startPos = nil
+
+    self.TitleBar.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+            dragStart = input.Position
+            startPos = self.Main.Position
+        end
+    end)
+
+    self.TitleBar.InputChanged:Connect(function(input)
+        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+            local delta = input.Position - dragStart
+            self.Main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        end
+    end)
+
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = false
+        end
+    end)
+
     return self
 end
 
