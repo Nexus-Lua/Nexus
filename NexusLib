@@ -7,9 +7,9 @@ local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 
---===============================================================================================================--
--- [THEME CONFIGURATION]
---===============================================================================================================--
+--[[===============================================================================================================]]
+--[[                                                  CORE CONFIG                                                  ]]
+--[[===============================================================================================================]]
 
 NexusLib.Themes = {
     Dark = {
@@ -18,7 +18,8 @@ NexusLib.Themes = {
         Accent = Color3.fromRGB(45, 45, 45),
         Text = Color3.fromRGB(240, 240, 240),
         Error = Color3.fromRGB(255, 85, 85),
-        Success = Color3.fromRGB(85, 255, 85)
+        Success = Color3.fromRGB(85, 255, 85),
+        Warning = Color3.fromRGB(255, 170, 0)
     },
     Light = {
         Primary = Color3.fromRGB(245, 245, 245),
@@ -26,7 +27,8 @@ NexusLib.Themes = {
         Accent = Color3.fromRGB(200, 200, 200),
         Text = Color3.fromRGB(30, 30, 30),
         Error = Color3.fromRGB(255, 100, 100),
-        Success = Color3.fromRGB(100, 255, 100)
+        Success = Color3.fromRGB(100, 255, 100),
+        Warning = Color3.fromRGB(255, 150, 0)
     }
 }
 
@@ -37,12 +39,22 @@ local ANIMATION_SETTINGS = {
     ClickScale = 0.95,
     RippleDuration = 0.5,
     Elastic = Enum.EasingStyle.Elastic,
-    Spring = Enum.EasingStyle.Bounce
+    Spring = Enum.EasingStyle.Bounce,
+    Transition = Enum.EasingStyle.Quad
 }
 
---===============================================================================================================--
--- [UTILITY FUNCTIONS]
---===============================================================================================================--
+local DEFAULT_CONFIG = {
+    EnableAnimations = true,
+    EnableRippleEffects = true,
+    EnableHoverEffects = true,
+    DefaultTheme = "Dark",
+    SaveConfig = false,
+    ConfigFolder = "NexusLib_Configs"
+}
+
+--[[===============================================================================================================]]
+--[[                                               UTILITY FUNCTIONS                                               ]]
+--[[===============================================================================================================]]
 
 local function Create(className, properties)
     local instance = Instance.new(className)
@@ -53,19 +65,32 @@ local function Create(className, properties)
     return instance
 end
 
+local function DeepCopy(original)
+    local copy = {}
+    for k, v in pairs(original) do
+        if type(v) == "table" then
+            copy[k] = DeepCopy(v)
+        else
+            copy[k] = v
+        end
+    end
+    return copy
+end
+
 local function AddRippleEffect(button)
     button.ClipsDescendants = true
-    local function CreateRipple(x, y)
-        local ripple = Create("Frame", {
-            Size = UDim2.new(0, 0, 0, 0),
-            Position = UDim2.new(0, x - button.AbsolutePosition.X, 0, y - button.AbsolutePosition.Y),
-            BackgroundColor3 = NexusLib.Themes.Dark.Accent,
-            BackgroundTransparency = 0.7,
-            Parent = button,
-            ZIndex = -1
-        })
-        
-        Create("UICorner", {CornerRadius = UDim.new(1, 0), Parent = ripple})
+    local rippleTemplate = Create("Frame", {
+        BackgroundTransparency = 0.8,
+        Size = UDim2.new(0, 0, 0, 0),
+        ZIndex = -1
+    })
+    
+    Create("UICorner", {CornerRadius = UDim.new(1, 0), Parent = rippleTemplate})
+    
+    button.MouseButton1Down:Connect(function(x, y)
+        local ripple = rippleTemplate:Clone()
+        ripple.Position = UDim2.new(0, x - button.AbsolutePosition.X, 0, y - button.AbsolutePosition.Y)
+        ripple.Parent = button
         
         TweenService:Create(ripple, TweenInfo.new(ANIMATION_SETTINGS.RippleDuration, Enum.EasingStyle.Quad), {
             Size = UDim2.new(2, 0, 2, 0),
@@ -74,15 +99,21 @@ local function AddRippleEffect(button)
         }):Play()
         
         game.Debris:AddItem(ripple, ANIMATION_SETTINGS.RippleDuration)
-    end
-    
-    button.MouseButton1Down:Connect(function(x, y)
-        CreateRipple(x, y)
     end)
 end
 
 local function Draggable(frame, handle)
     local dragging, dragInput, dragStart, startPos
+    
+    local function UpdatePosition(input)
+        local delta = input.Position - dragStart
+        frame.Position = UDim2.new(
+            startPos.X.Scale, 
+            startPos.X.Offset + delta.X,
+            startPos.Y.Scale, 
+            startPos.Y.Offset + delta.Y
+        )
+    end
     
     handle.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
@@ -106,24 +137,21 @@ local function Draggable(frame, handle)
     
     UserInputService.InputChanged:Connect(function(input)
         if input == dragInput and dragging then
-            local delta = input.Position - dragStart
-            frame.Position = UDim2.new(
-                startPos.X.Scale, 
-                startPos.X.Offset + delta.X,
-                startPos.Y.Scale, 
-                startPos.Y.Offset + delta.Y
-            )
+            UpdatePosition(input)
         end
     end)
 end
 
---===============================================================================================================--
--- [WINDOW SYSTEM]
---===============================================================================================================--
+--[[===============================================================================================================]]
+--[[                                               WINDOW SYSTEM                                                   ]]
+--[[===============================================================================================================]]
 
-function NexusLib:Window(title, config)
-    local window = {Tabs = {}, Notifications = {}, Elements = {}}
+function NexusLib:CreateWindow(title, config)
+    local window = {Tabs = {}, Notifications = {}, Elements = {}, Config = DeepCopy(DEFAULT_CONFIG)}
     config = config or {}
+    
+    -- Merge config with defaults
+    for k, v in pairs(config) do window.Config[k] = v end
     
     -- Main Container
     window.Main = Create("ScreenGui", {
@@ -137,30 +165,30 @@ function NexusLib:Window(title, config)
     local mainFrame = Create("Frame", {
         Size = UDim2.new(0, 500, 0, 400),
         Position = UDim2.new(0.5, -250, 0.5, -200),
-        BackgroundColor3 = NexusLib.Themes.Dark.Primary,
+        BackgroundColor3 = NexusLib.Themes[window.Config.DefaultTheme].Primary,
         Parent = window.Main,
         ClipsDescendants = true
     })
     
     Create("UICorner", {CornerRadius = UDim.new(0, 8), Parent = mainFrame})
-    Create("UIStroke", {Color = NexusLib.Themes.Dark.Secondary, Thickness = 2, Parent = mainFrame})
+    Create("UIStroke", {Color = NexusLib.Themes[window.Config.DefaultTheme].Secondary, Thickness = 2, Parent = mainFrame})
     
     -- Title Bar
     local titleBar = Create("Frame", {
         Size = UDim2.new(1, 0, 0, 30),
-        BackgroundColor3 = NexusLib.Themes.Dark.Secondary,
+        BackgroundColor3 = NexusLib.Themes[window.Config.DefaultTheme].Secondary,
         Parent = mainFrame
     })
     
     Create("UICorner", {CornerRadius = UDim.new(0, 8), Parent = titleBar})
-    Create("UIStroke", {Color = NexusLib.Themes.Dark.Accent, Thickness = 1, Parent = titleBar})
+    Create("UIStroke", {Color = NexusLib.Themes[window.Config.DefaultTheme].Accent, Thickness = 1, Parent = titleBar})
     
     -- Title Label
     local titleLabel = Create("TextLabel", {
         Text = title,
         Font = Enum.Font.GothamBold,
         TextSize = 14,
-        TextColor3 = NexusLib.Themes.Dark.Text,
+        TextColor3 = NexusLib.Themes[window.Config.DefaultTheme].Text,
         Size = UDim2.new(1, -60, 1, 0),
         Position = UDim2.new(0, 10, 0, 0),
         BackgroundTransparency = 1,
@@ -171,7 +199,7 @@ function NexusLib:Window(title, config)
     local closeButton = Create("TextButton", {
         Size = UDim2.new(0, 20, 0, 20),
         Position = UDim2.new(1, -25, 0.5, -10),
-        BackgroundColor3 = NexusLib.Themes.Dark.Error,
+        BackgroundColor3 = NexusLib.Themes[window.Config.DefaultTheme].Error,
         Text = "",
         Parent = titleBar
     })
@@ -192,7 +220,7 @@ function NexusLib:Window(title, config)
     local minimizeButton = Create("TextButton", {
         Size = UDim2.new(0, 20, 0, 20),
         Position = UDim2.new(1, -50, 0.5, -10),
-        BackgroundColor3 = NexusLib.Themes.Dark.Accent,
+        BackgroundColor3 = NexusLib.Themes[window.Config.DefaultTheme].Accent,
         Text = "",
         Parent = titleBar
     })
@@ -210,7 +238,7 @@ function NexusLib:Window(title, config)
         Position = UDim2.new(0, 10, 0, 35),
         BackgroundTransparency = 1,
         ScrollBarThickness = 4,
-        ScrollBarImageColor3 = NexusLib.Themes.Dark.Accent,
+        ScrollBarImageColor3 = NexusLib.Themes[window.Config.DefaultTheme].Accent,
         Parent = mainFrame
     })
     
@@ -239,24 +267,26 @@ function NexusLib:Window(title, config)
     -- Dragging System
     Draggable(mainFrame, titleBar)
     
-    -- Window Methods
+    --[[===============================================================================================================]]
+    --[[                                               PUBLIC METHODS                                                ]]
+    --[[===============================================================================================================]]
+    
     function window:Notification(config)
         local notifFrame = Create("Frame", {
             Size = UDim2.new(1, 0, 0, 60),
-            BackgroundColor3 = NexusLib.Themes.Dark.Secondary,
+            BackgroundColor3 = NexusLib.Themes[window.Config.DefaultTheme].Secondary,
             Parent = notificationHolder,
             LayoutOrder = #notificationHolder:GetChildren()
         })
         
         Create("UICorner", {CornerRadius = UDim.new(0, 6), Parent = notifFrame})
-        Create("UIStroke", {Color = NexusLib.Themes.Dark.Accent, Parent = notifFrame})
+        Create("UIStroke", {Color = NexusLib.Themes[window.Config.DefaultTheme].Accent, Parent = notifFrame})
         
-        -- Notification Content
         local titleLabel = Create("TextLabel", {
             Text = config.Title or "Notification",
             Font = Enum.Font.GothamBold,
             TextSize = 14,
-            TextColor3 = NexusLib.Themes.Dark.Text,
+            TextColor3 = NexusLib.Themes[window.Config.DefaultTheme].Text,
             Position = UDim2.new(0, 10, 0, 5),
             Size = UDim2.new(1, -20, 0, 20),
             BackgroundTransparency = 1,
@@ -267,7 +297,7 @@ function NexusLib:Window(title, config)
             Text = config.Content or "Sample Content",
             Font = Enum.Font.Gotham,
             TextSize = 12,
-            TextColor3 = NexusLib.Themes.Dark.Text,
+            TextColor3 = NexusLib.Themes[window.Config.DefaultTheme].Text,
             Position = UDim2.new(0, 10, 0, 25),
             Size = UDim2.new(1, -20, 1, -30),
             TextWrapped = true,
@@ -275,7 +305,6 @@ function NexusLib:Window(title, config)
             Parent = notifFrame
         })
         
-        -- Animation Sequence
         notifFrame.Position = UDim2.new(1, 0, 1, 0)
         TweenService:Create(notifFrame, TweenInfo.new(ANIMATION_SETTINGS.FadeIn, Enum.EasingStyle.Quad), {
             Position = UDim2.new(0, 0, 1, -65)
@@ -290,15 +319,14 @@ function NexusLib:Window(title, config)
         notifFrame:Destroy()
     end
     
-    function window:Tab(name)
-        local tab = {Buttons = {}, Sections = {}}
+    function window:CreateTab(name)
+        local tab = {}
         
-        -- Tab Button
         local tabButton = Create("TextButton", {
             Text = name,
             Size = UDim2.new(1, -10, 0, 30),
-            BackgroundColor3 = NexusLib.Themes.Dark.Secondary,
-            TextColor3 = NexusLib.Themes.Dark.Text,
+            BackgroundColor3 = NexusLib.Themes[window.Config.DefaultTheme].Secondary,
+            TextColor3 = NexusLib.Themes[window.Config.DefaultTheme].Text,
             Font = Enum.Font.GothamSemibold,
             Parent = tabContainer
         })
@@ -306,7 +334,6 @@ function NexusLib:Window(title, config)
         Create("UICorner", {CornerRadius = UDim.new(0, 5), Parent = tabButton})
         AddRippleEffect(tabButton)
         
-        -- Tab Content
         local contentFrame = Create("ScrollingFrame", {
             Size = UDim2.new(1, -20, 1, -40),
             Position = UDim2.new(0, 10, 0, 35),
@@ -321,7 +348,6 @@ function NexusLib:Window(title, config)
             Parent = contentFrame
         })
         
-        -- Tab Activation
         tabButton.MouseButton1Click:Connect(function()
             for _, v in pairs(mainFrame:GetChildren()) do
                 if v:IsA("ScrollingFrame") and v ~= tabContainer then
@@ -331,25 +357,23 @@ function NexusLib:Window(title, config)
             contentFrame.Visible = true
         end)
         
-        -- Section System
-        function tab:Section(name)
+        function tab:CreateSection(name)
             local section = {}
             
             local sectionFrame = Create("Frame", {
                 Size = UDim2.new(1, 0, 0, 30),
-                BackgroundColor3 = NexusLib.Themes.Dark.Secondary,
+                BackgroundColor3 = NexusLib.Themes[window.Config.DefaultTheme].Secondary,
                 Parent = contentFrame
             })
             
             Create("UICorner", {CornerRadius = UDim.new(0, 5), Parent = sectionFrame})
-            Create("UIStroke", {Color = NexusLib.Themes.Dark.Accent, Parent = sectionFrame})
+            Create("UIStroke", {Color = NexusLib.Themes[window.Config.DefaultTheme].Accent, Parent = sectionFrame})
             
-            -- Section Content
             local sectionLabel = Create("TextLabel", {
                 Text = name,
                 Font = Enum.Font.GothamBold,
                 TextSize = 13,
-                TextColor3 = NexusLib.Themes.Dark.Text,
+                TextColor3 = NexusLib.Themes[window.Config.DefaultTheme].Text,
                 Size = UDim2.new(1, -10, 1, 0),
                 Position = UDim2.new(0, 10, 0, 0),
                 BackgroundTransparency = 1,
@@ -368,33 +392,147 @@ function NexusLib:Window(title, config)
                 Parent = contentContainer
             })
             
-            -- Button Component
-            function section:Button(text, callback)
-                local button = Create("TextButton", {
-                    Text = text,
-                    Size = UDim2.new(1, 0, 0, 30),
-                    BackgroundColor3 = NexusLib.Themes.Dark.Accent,
-                    TextColor3 = NexusLib.Themes.Dark.Text,
-                    Font = Enum.Font.Gotham,
-                    Parent = contentContainer
-                })
-                
-                Create("UICorner", {CornerRadius = UDim.new(0, 5), Parent = button})
-                AddRippleEffect(button)
-                
-                -- Click Animation
-                button.MouseButton1Click:Connect(function()
-                    TweenService:Create(button, TweenInfo.new(0.1, Enum.EasingStyle.Back), {
-                        Size = UDim2.new(0.95, 0, 0.95, 0)
-                    }):Play()
-                    task.wait(0.1)
-                    TweenService:Create(button, TweenInfo.new(0.2, ANIMATION_SETTINGS.Elastic), {
-                        Size = UDim2.new(1, 0, 1, 0)
-                    }):Play()
-                    callback()
-                end)
-                
-                return button
+-- Section: UI Components
+function section:AddButton(text, config)
+    config = config or {}
+    local buttonType = config.Type or "Default" -- Default/Danger/Success/Warning/Icon/Outline/Ghost/Loading/Toggle/Disabled
+    local buttonSize = config.Size or "Medium" -- Small/Medium/Large
+    local icon = config.Icon or nil
+    
+    local button = Create("TextButton", {
+        Text = "",
+        Size = UDim2.new(1, 0, 0, 40),
+        BackgroundColor3 = NexusLib.Themes[window.Config.DefaultTheme].Accent,
+        TextColor3 = NexusLib.Themes[window.Config.DefaultTheme].Text,
+        Font = Enum.Font.Gotham,
+        Parent = contentContainer
+    })
+    
+    -- Style de base
+    Create("UICorner", {CornerRadius = UDim.new(0, 5), Parent = button})
+    AddRippleEffect(button)
+    
+    -- Configuration des types
+    local styles = {
+        Default = {
+            Background = NexusLib.Themes[window.Config.DefaultTheme].Accent,
+            TextColor = NexusLib.Themes[window.Config.DefaultTheme].Text
+        },
+        Danger = {
+            Background = Color3.fromRGB(255, 85, 85),
+            TextColor = Color3.fromRGB(255, 255, 255)
+        },
+        Success = {
+            Background = Color3.fromRGB(85, 255, 85),
+            TextColor = Color3.fromRGB(30, 30, 30)
+        },
+        Warning = {
+            Background = Color3.fromRGB(255, 170, 0),
+            TextColor = Color3.fromRGB(30, 30, 30)
+        },
+        Outline = {
+            Background = Color3.fromRGB(0, 0, 0),
+            TextColor = NexusLib.Themes[window.Config.DefaultTheme].Text,
+            StrokeColor = NexusLib.Themes[window.Config.DefaultTheme].Accent,
+            StrokeThickness = 2
+        },
+        Ghost = {
+            BackgroundTransparency = 1,
+            TextColor = NexusLib.Themes[window.Config.DefaultTheme].Text
+        },
+        Icon = {
+            Background = NexusLib.Themes[window.Config.DefaultTheme].Secondary,
+            TextColor = NexusLib.Themes[window.Config.DefaultTheme].Text,
+            Icon = icon or "rbxassetid://12345678"
+        }
+    }
+    
+    -- Application du style
+    local style = styles[buttonType] or styles.Default
+    button.BackgroundColor3 = style.Background or button.BackgroundColor3
+    button.TextColor3 = style.TextColor
+    button.BackgroundTransparency = style.BackgroundTransparency or 0
+    
+    if buttonType == "Outline" then
+        Create("UIStroke", {
+            Color = style.StrokeColor,
+            Thickness = style.StrokeThickness,
+            Parent = button
+        })
+    end
+    
+    -- Gestion des icônes
+    if buttonType == "Icon" and icon then
+        button.TextXAlignment = Enum.TextXAlignment.Left
+        local iconLabel = Create("ImageLabel", {
+            Image = icon,
+            Size = UDim2.new(0, 20, 0, 20),
+            Position = UDim2.new(0, 10, 0.5, -10),
+            BackgroundTransparency = 1,
+            Parent = button
+        })
+        button.Text = "    "..text
+    else
+        button.Text = text
+    end
+    
+    -- Animation personnalisée
+    local baseSize = button.Size
+    button.MouseButton1Click:Connect(function()
+        if config.Loading then
+            -- Animation de chargement
+            local loader = Create("Frame", {
+                Size = UDim2.new(0, 0, 1, 0),
+                BackgroundColor3 = Color3.new(1, 1, 1),
+                Parent = button
+            })
+            
+            TweenService:Create(loader, TweenInfo.new(0.5), {
+                Size = UDim2.new(1, 0, 1, 0)
+            }):Play()
+        else
+            -- Animation standard
+            TweenService:Create(button, TweenInfo.new(0.1, Enum.EasingStyle.Back), {
+                Size = baseSize * UDim2.new(0.95, 0, 0.95, 0)
+            }):Play()
+            task.wait(0.1)
+            TweenService:Create(button, TweenInfo.new(0.2, ANIMATION_SETTINGS.Elastic), {
+                Size = baseSize
+            }):Play()
+        end
+        
+        if config.Callback then
+            pcall(config.Callback)
+        end
+    end)
+    
+    -- Gestion du toggle
+    if buttonType == "Toggle" then
+        local state = false
+        button.MouseButton1Click:Connect(function()
+            state = not state
+            TweenService:Create(button, TweenInfo.new(0.2), {
+                BackgroundColor3 = state and NexusLib.Themes[window.Config.DefaultTheme].Success or NexusLib.Themes[window.Config.DefaultTheme].Accent
+            }):Play()
+        end)
+    end
+    
+    -- Gestion disabled
+    if buttonType == "Disabled" then
+        button.Active = false
+        button.TextTransparency = 0.5
+        button.BackgroundTransparency = 0.8
+    end
+
+    return {
+        Instance = button,
+        SetDisabled = function(disable)
+            button.Active = not disable
+            button.TextTransparency = disable and 0.5 or 0
+            button.BackgroundTransparency = disable and 0.8 or 0
+        end
+    }
+end
             end
             
             return section
@@ -403,7 +541,39 @@ function NexusLib:Window(title, config)
         return tab
     end
     
-    return window
+    function window:SetTheme(themeName)
+        if NexusLib.Themes[themeName] then
+            window.Config.DefaultTheme = themeName
+            -- Update all elements colors here
+        end
+    end
+    
+    function window:SaveConfig(name)
+        if window.Config.SaveConfig then
+            -- Save configuration logic
+        end
+    end
+    
+    function window:LoadConfig(name)
+        if window.Config.SaveConfig then
+            -- Load configuration logic
+        end
+    end
+    
+    function window:Destroy()
+        window.Main:Destroy()
+        NexusLib.Windows[window] = nil
+    end
+    
+    --[[===============================================================================================================]]
+    --[[                                               INITIALIZATION                                               ]]
+    --[[===============================================================================================================]]
+    if window.Config.EnableAnimations then
+    mainFrame.Size = UDim2.new(0, 0, 0, 0)
+    TweenService:Create(mainFrame, TweenInfo.new(0.5, Enum.EasingStyle.Back), {
+        Size = UDim2.new(0, 500, 0, 400)
+    }):Play()
 end
 
-return NexusLib
+NexusLib.Windows[window] = true
+return window
