@@ -1,494 +1,409 @@
-local NexusLib = {}
-NexusLib.__index = NexusLib
-
--- Services
+-- NexusLib.lua
+local NexusLib = {Windows = {}, Elements = {}, Themes = {}, Flags = {}, Connections = {}}
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
 local HttpService = game:GetService("HttpService")
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
 
--- Themes
-local themes = {
-    Primary = Color3.fromRGB(10, 10, 10),
-    Secondary = Color3.fromRGB(20, 20, 20),
-    Accent = Color3.fromRGB(50, 50, 50),
-    Text = Color3.fromRGB(200, 200, 200)
+--===============================================================================================================--
+-- [THEME CONFIGURATION]
+--===============================================================================================================--
+
+NexusLib.Themes = {
+    Dark = {
+        Primary = Color3.fromRGB(15, 15, 15),
+        Secondary = Color3.fromRGB(25, 25, 25),
+        Accent = Color3.fromRGB(45, 45, 45),
+        Text = Color3.fromRGB(240, 240, 240),
+        Error = Color3.fromRGB(255, 85, 85),
+        Success = Color3.fromRGB(85, 255, 85)
+    },
+    Light = {
+        Primary = Color3.fromRGB(245, 245, 245),
+        Secondary = Color3.fromRGB(225, 225, 225),
+        Accent = Color3.fromRGB(200, 200, 200),
+        Text = Color3.fromRGB(30, 30, 30),
+        Error = Color3.fromRGB(255, 100, 100),
+        Success = Color3.fromRGB(100, 255, 100)
+    }
 }
 
--- Animation Settings
 local ANIMATION_SETTINGS = {
-    FadeDuration = 0.2,
+    FadeIn = 0.25,
+    FadeOut = 0.2,
     HoverIntensity = 0.1,
     ClickScale = 0.95,
-    RippleColor = themes.Accent,
-    TransitionType = "FadeScale"
+    RippleDuration = 0.5,
+    Elastic = Enum.EasingStyle.Elastic,
+    Spring = Enum.EasingStyle.Bounce
 }
 
--- Utility Functions
+--===============================================================================================================--
+-- [UTILITY FUNCTIONS]
+--===============================================================================================================--
+
 local function Create(className, properties)
     local instance = Instance.new(className)
     for prop, value in pairs(properties) do
-        instance[prop] = value
+        if prop == "Parent" then continue end
+        pcall(function() instance[prop] = value end)
     end
     return instance
 end
 
-local function Animate(instance, properties, duration, style, direction)
-    local tweenInfo = TweenInfo.new(
-        duration or ANIMATION_SETTINGS.FadeDuration,
-        style or Enum.EasingStyle.Quad,
-        direction or Enum.EasingDirection.Out
-    )
-    local tween = TweenService:Create(instance, tweenInfo, properties)
-    tween:Play()
-    return tween
+local function AddRippleEffect(button)
+    button.ClipsDescendants = true
+    local function CreateRipple(x, y)
+        local ripple = Create("Frame", {
+            Size = UDim2.new(0, 0, 0, 0),
+            Position = UDim2.new(0, x - button.AbsolutePosition.X, 0, y - button.AbsolutePosition.Y),
+            BackgroundColor3 = NexusLib.Themes.Dark.Accent,
+            BackgroundTransparency = 0.7,
+            Parent = button,
+            ZIndex = -1
+        })
+        
+        Create("UICorner", {CornerRadius = UDim.new(1, 0), Parent = ripple})
+        
+        TweenService:Create(ripple, TweenInfo.new(ANIMATION_SETTINGS.RippleDuration, Enum.EasingStyle.Quad), {
+            Size = UDim2.new(2, 0, 2, 0),
+            Position = UDim2.new(-0.5, x - button.AbsolutePosition.X, -0.5, y - button.AbsolutePosition.Y),
+            BackgroundTransparency = 1
+        }):Play()
+        
+        game.Debris:AddItem(ripple, ANIMATION_SETTINGS.RippleDuration)
+    end
+    
+    button.MouseButton1Down:Connect(function(x, y)
+        CreateRipple(x, y)
+    end)
 end
 
-local function CreateRipple(button, x, y)
-    local ripple = Create("Frame", {
-        Size = UDim2.new(0, 0, 0, 0),
-        Position = UDim2.new(0, x - button.AbsolutePosition.X, 0, y - button.AbsolutePosition.Y),
-        BackgroundColor3 = ANIMATION_SETTINGS.RippleColor,
-        BackgroundTransparency = 0.6,
-        Parent = button
-    })
+local function Draggable(frame, handle)
+    local dragging, dragInput, dragStart, startPos
     
-    Create("UICorner", {
-        CornerRadius = UDim.new(1, 0),
-        Parent = ripple
-    })
+    handle.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+            dragStart = input.Position
+            startPos = frame.Position
+            
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                end
+            end)
+        end
+    end)
     
-    local targetSize = UDim2.new(2, 0, 2, 0)
-    local targetPosition = UDim2.new(-0.5, x - button.AbsolutePosition.X, -0.5, y - button.AbsolutePosition.Y)
+    handle.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement then
+            dragInput = input
+        end
+    end)
     
-    Animate(ripple, {
-        Size = targetSize,
-        Position = targetPosition,
-        BackgroundTransparency = 1
-    }, 0.5)
-    
-    game:GetService("Debris"):AddItem(ripple, 0.5)
+    UserInputService.InputChanged:Connect(function(input)
+        if input == dragInput and dragging then
+            local delta = input.Position - dragStart
+            frame.Position = UDim2.new(
+                startPos.X.Scale, 
+                startPos.X.Offset + delta.X,
+                startPos.Y.Scale, 
+                startPos.Y.Offset + delta.Y
+            )
+        end
+    end)
 end
 
--- Window Constructor
-function NexusLib.new(title)
-    local self = setmetatable({}, NexusLib)
+--===============================================================================================================--
+-- [WINDOW SYSTEM]
+--===============================================================================================================--
+
+function NexusLib:Window(title, config)
+    local window = {Tabs = {}, Notifications = {}, Elements = {}}
+    config = config or {}
     
-    self.GUI = Create("ScreenGui", {
-        Name = "NexusLib",
-        Parent = game.CoreGui
+    -- Main Container
+    window.Main = Create("ScreenGui", {
+        Name = "NexusLibWindow_"..title,
+        Parent = config.Parent or game.CoreGui,
+        ResetOnSpawn = false,
+        ZIndexBehavior = Enum.ZIndexBehavior.Global
     })
     
-    self.Main = Create("Frame", {
-        Name = "Main",
-        Size = UDim2.new(0, 400, 0, 300),
-        Position = UDim2.new(0.5, -200, 0.5, -150),
-        BackgroundColor3 = themes.Primary,
-        BackgroundTransparency = 1,
-        Parent = self.GUI
+    -- Main Frame
+    local mainFrame = Create("Frame", {
+        Size = UDim2.new(0, 500, 0, 400),
+        Position = UDim2.new(0.5, -250, 0.5, -200),
+        BackgroundColor3 = NexusLib.Themes.Dark.Primary,
+        Parent = window.Main,
+        ClipsDescendants = true
     })
     
-    -- Entrance Animation
-    Animate(self.Main, {
-        BackgroundTransparency = 0,
-        Position = UDim2.new(0.5, -200, 0.5, -150)
-    }, 0.3, Enum.EasingStyle.Back)
+    Create("UICorner", {CornerRadius = UDim.new(0, 8), Parent = mainFrame})
+    Create("UIStroke", {Color = NexusLib.Themes.Dark.Secondary, Thickness = 2, Parent = mainFrame})
     
-    Create("UICorner", {
-        CornerRadius = UDim.new(0, 8),
-        Parent = self.Main
-    })
-    
-    -- Title Bar with Gradient
-    self.TitleBar = Create("Frame", {
-        Name = "TitleBar",
+    -- Title Bar
+    local titleBar = Create("Frame", {
         Size = UDim2.new(1, 0, 0, 30),
-        BackgroundColor3 = themes.Secondary,
-        Parent = self.Main
+        BackgroundColor3 = NexusLib.Themes.Dark.Secondary,
+        Parent = mainFrame
     })
     
-    Create("UICorner", {
-        CornerRadius = UDim.new(0, 8),
-        Parent = self.TitleBar
-    })
+    Create("UICorner", {CornerRadius = UDim.new(0, 8), Parent = titleBar})
+    Create("UIStroke", {Color = NexusLib.Themes.Dark.Accent, Thickness = 1, Parent = titleBar})
     
-    local titleGradient = Create("UIGradient", {
-        Color = ColorSequence.new({
-            ColorSequenceKeypoint.new(0, themes.Secondary),
-            ColorSequenceKeypoint.new(1, themes.Accent)
-        }),
-        Transparency = NumberSequence.new(0.8),
-        Rotation = 45,
-        Parent = self.TitleBar
-    })
-    
-    Create("TextLabel", {
+    -- Title Label
+    local titleLabel = Create("TextLabel", {
         Text = title,
-        Size = UDim2.new(1, -10, 1, 0),
+        Font = Enum.Font.GothamBold,
+        TextSize = 14,
+        TextColor3 = NexusLib.Themes.Dark.Text,
+        Size = UDim2.new(1, -60, 1, 0),
         Position = UDim2.new(0, 10, 0, 0),
         BackgroundTransparency = 1,
-        TextColor3 = themes.Text,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        Font = Enum.Font.GothamBold,
-        Parent = self.TitleBar
-    })
-    
-    -- Container for Sections
-    self.Container = Create("ScrollingFrame", {
-        Size = UDim2.new(1, -20, 1, -40),
-        Position = UDim2.new(0, 10, 0, 35),
-        BackgroundTransparency = 1,
-        ScrollBarThickness = 4,
-        ScrollBarImageColor3 = themes.Accent,
-        Parent = self.Main
-    })
-    
-    Create("UIListLayout", {
-        Padding = UDim.new(0, 10),
-        Parent = self.Container
+        Parent = titleBar
     })
     
     -- Close Button
     local closeButton = Create("TextButton", {
         Size = UDim2.new(0, 20, 0, 20),
-        Position = UDim2.new(1, -50, 0, 5),
-        BackgroundColor3 = Color3.fromRGB(255, 95, 95),
+        Position = UDim2.new(1, -25, 0.5, -10),
+        BackgroundColor3 = NexusLib.Themes.Dark.Error,
         Text = "",
-        Parent = self.TitleBar
+        Parent = titleBar
     })
     
-    Create("UICorner", {
-        CornerRadius = UDim.new(1, 0),
-        Parent = closeButton
-    })
+    Create("UICorner", {CornerRadius = UDim.new(1, 0), Parent = closeButton})
+    AddRippleEffect(closeButton)
     
     closeButton.MouseButton1Click:Connect(function()
-        Animate(self.Main, {
-            BackgroundTransparency = 1,
-            Position = UDim2.new(0.5, -200, 0.6, -150)
-        }, 0.3, Enum.EasingStyle.Back, Enum.EasingDirection.In)
-        wait(0.3)
-        self.GUI:Destroy()
+        TweenService:Create(mainFrame, TweenInfo.new(ANIMATION_SETTINGS.FadeOut, Enum.EasingStyle.Quad), {
+            Size = UDim2.new(0, 0, 0, 0),
+            Position = UDim2.new(0.5, 0, 0.5, 0)
+        }):Play()
+        task.wait(ANIMATION_SETTINGS.FadeOut)
+        window.Main:Destroy()
     end)
-
+    
     -- Minimize Button
     local minimizeButton = Create("TextButton", {
         Size = UDim2.new(0, 20, 0, 20),
-        Position = UDim2.new(1, -25, 0, 5),
-        BackgroundColor3 = Color3.fromRGB(255, 255, 0),
+        Position = UDim2.new(1, -50, 0.5, -10),
+        BackgroundColor3 = NexusLib.Themes.Dark.Accent,
         Text = "",
-        Parent = self.TitleBar
+        Parent = titleBar
     })
     
-    Create("UICorner", {
-        CornerRadius = UDim.new(1, 0),
-        Parent = minimizeButton
-    })
+    Create("UICorner", {CornerRadius = UDim.new(1, 0), Parent = minimizeButton})
+    AddRippleEffect(minimizeButton)
     
     minimizeButton.MouseButton1Click:Connect(function()
-        Animate(self.Main, {
-            BackgroundTransparency = 1,
-            Size = UDim2.new(0, 400, 0, 30),
-            Position = UDim2.new(0.5, -200, 0.5, -150)
-        }, 0.3, Enum.EasingStyle.Back, Enum.EasingDirection.In)
+        mainFrame.Visible = not mainFrame.Visible
     end)
-
-    -- Draggable UI
-    local dragging = false
-    local dragStart = nil
-    local startPos = nil
-
-    self.TitleBar.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging = true
-            dragStart = input.Position
-            startPos = self.Main.Position
-        end
-    end)
-
-    self.TitleBar.InputChanged:Connect(function(input)
-        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-            local delta = input.Position - dragStart
-            self.Main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-        end
-    end)
-
-    UserInputService.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging = false
-        end
-    end)
-
-    return self
-end
-
--- Section Constructor
-function NexusLib:AddSection(title)
-    local section = {}
-    section.__index = section
     
-    section.Frame = Create("Frame", {
-        Name = title,
-        Size = UDim2.new(1, 0, 0, 30),
-        BackgroundColor3 = themes.Secondary,
-        BackgroundTransparency = 0.2,
-        Parent = self.Container
-    })
-    
-    Create("UICorner", {
-        CornerRadius = UDim.new(0, 6),
-        Parent = section.Frame
-    })
-    
-    Create("TextLabel", {
-        Text = title,
-        Size = UDim2.new(1, -10, 0, 30),
-        Position = UDim2.new(0, 10, 0, 0),
+    -- Tabs Container
+    local tabContainer = Create("ScrollingFrame", {
+        Size = UDim2.new(1, -20, 1, -40),
+        Position = UDim2.new(0, 10, 0, 35),
         BackgroundTransparency = 1,
-        TextColor3 = themes.Text,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        Font = Enum.Font.GothamSemibold,
-        Parent = section.Frame
+        ScrollBarThickness = 4,
+        ScrollBarImageColor3 = NexusLib.Themes.Dark.Accent,
+        Parent = mainFrame
     })
     
-    section.ContentFrame = Create("Frame", {
-        Name = "Content",
-        Size = UDim2.new(1, 0, 0, 0),
-        Position = UDim2.new(0, 0, 0, 30),
-        BackgroundTransparency = 1,
-        Parent = section.Frame
-    })
-    
-    local listLayout = Create("UIListLayout", {
+    Create("UIListLayout", {
         Padding = UDim.new(0, 5),
-        Parent = section.ContentFrame
+        SortOrder = Enum.SortOrder.LayoutOrder,
+        Parent = tabContainer
     })
     
-    -- Auto-size content frame
-    listLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-        section.ContentFrame.Size = UDim2.new(1, 0, 0, listLayout.AbsoluteContentSize.Y)
-        section.Frame.Size = UDim2.new(1, 0, 0, listLayout.AbsoluteContentSize.Y + 35)
-    end)
+    -- Notification System
+    local notificationHolder = Create("Frame", {
+        Size = UDim2.new(0.3, 0, 1, -10),
+        Position = UDim2.new(1, -10, 0, 5),
+        AnchorPoint = Vector2.new(1, 0),
+        BackgroundTransparency = 1,
+        Parent = window.Main
+    })
     
-    -- Button Constructor
-    function section:AddButton(text, callback)
-        local button = Create("TextButton", {
-            Text = text,
-            Size = UDim2.new(1, -20, 0, 30),
-            Position = UDim2.new(0, 10, 0, 0),
-            BackgroundColor3 = themes.Accent,
-            TextColor3 = themes.Text,
+    Create("UIListLayout", {
+        VerticalAlignment = Enum.VerticalAlignment.Bottom,
+        HorizontalAlignment = Enum.HorizontalAlignment.Right,
+        Padding = UDim.new(0, 5),
+        Parent = notificationHolder
+    })
+    
+    -- Dragging System
+    Draggable(mainFrame, titleBar)
+    
+    -- Window Methods
+    function window:Notification(config)
+        local notifFrame = Create("Frame", {
+            Size = UDim2.new(1, 0, 0, 60),
+            BackgroundColor3 = NexusLib.Themes.Dark.Secondary,
+            Parent = notificationHolder,
+            LayoutOrder = #notificationHolder:GetChildren()
+        })
+        
+        Create("UICorner", {CornerRadius = UDim.new(0, 6), Parent = notifFrame})
+        Create("UIStroke", {Color = NexusLib.Themes.Dark.Accent, Parent = notifFrame})
+        
+        -- Notification Content
+        local titleLabel = Create("TextLabel", {
+            Text = config.Title or "Notification",
+            Font = Enum.Font.GothamBold,
+            TextSize = 14,
+            TextColor3 = NexusLib.Themes.Dark.Text,
+            Position = UDim2.new(0, 10, 0, 5),
+            Size = UDim2.new(1, -20, 0, 20),
+            BackgroundTransparency = 1,
+            Parent = notifFrame
+        })
+        
+        local contentLabel = Create("TextLabel", {
+            Text = config.Content or "Sample Content",
             Font = Enum.Font.Gotham,
-            Parent = self.ContentFrame,
-            AutoButtonColor = false
+            TextSize = 12,
+            TextColor3 = NexusLib.Themes.Dark.Text,
+            Position = UDim2.new(0, 10, 0, 25),
+            Size = UDim2.new(1, -20, 1, -30),
+            TextWrapped = true,
+            BackgroundTransparency = 1,
+            Parent = notifFrame
         })
         
-        Create("UICorner", {
-            CornerRadius = UDim.new(0, 6),
-            Parent = button
-        })
+        -- Animation Sequence
+        notifFrame.Position = UDim2.new(1, 0, 1, 0)
+        TweenService:Create(notifFrame, TweenInfo.new(ANIMATION_SETTINGS.FadeIn, Enum.EasingStyle.Quad), {
+            Position = UDim2.new(0, 0, 1, -65)
+        }):Play()
         
-        -- Hover Animation
-        button.MouseEnter:Connect(function()
-            Animate(button, {
-                BackgroundColor3 = Color3.new(
-                    math.min(themes.Accent.R + 0.1, 1),
-                    math.min(themes.Accent.G + 0.1, 1),
-                    math.min(themes.Accent.B + 0.1, 1)
-                )
-            }, 0.2)
-        end)
+        task.wait(config.Duration or 5)
         
-        button.MouseLeave:Connect(function()
-            Animate(button, {
-                BackgroundColor3 = themes.Accent
-            }, 0.2)
-        end)
-        
-        -- Click Animation
-        button.MouseButton1Down:Connect(function()
-            Animate(button, {
-                Size = UDim2.new(1, -20, 0, 28)
-            }, 0.1)
-        end)
-        
-        button.MouseButton1Up:Connect(function()
-            Animate(button, {
-                Size = UDim2.new(1, -20, 0, 30)
-            }, 0.1)
-        end)
-        
-        -- Ripple Effect
-        button.MouseButton1Down:Connect(function(x, y)
-            CreateRipple(button, x, y)
-        end)
-        
-        button.MouseButton1Click:Connect(callback)
-        
-        return button
+        TweenService:Create(notifFrame, TweenInfo.new(ANIMATION_SETTINGS.FadeOut, Enum.EasingStyle.Quad), {
+            Position = UDim2.new(1, 0, 1, 0)
+        }):Play()
+        task.wait(ANIMATION_SETTINGS.FadeOut)
+        notifFrame:Destroy()
     end
     
-    -- Slider Constructor
-    function section:AddSlider(text, min, max, default, callback)
-        local sliderFrame = Create("Frame", {
-            Size = UDim2.new(1, -20, 0, 50),
-            Position = UDim2.new(0, 10, 0, 0),
+    function window:Tab(name)
+        local tab = {Buttons = {}, Sections = {}}
+        
+        -- Tab Button
+        local tabButton = Create("TextButton", {
+            Text = name,
+            Size = UDim2.new(1, -10, 0, 30),
+            BackgroundColor3 = NexusLib.Themes.Dark.Secondary,
+            TextColor3 = NexusLib.Themes.Dark.Text,
+            Font = Enum.Font.GothamSemibold,
+            Parent = tabContainer
+        })
+        
+        Create("UICorner", {CornerRadius = UDim.new(0, 5), Parent = tabButton})
+        AddRippleEffect(tabButton)
+        
+        -- Tab Content
+        local contentFrame = Create("ScrollingFrame", {
+            Size = UDim2.new(1, -20, 1, -40),
+            Position = UDim2.new(0, 10, 0, 35),
             BackgroundTransparency = 1,
-            Parent = self.ContentFrame
+            ScrollBarThickness = 4,
+            Visible = false,
+            Parent = mainFrame
         })
         
-        local label = Create("TextLabel", {
-            Text = text .. ": " .. default,
-            Size = UDim2.new(1, 0, 0, 20),
-            BackgroundTransparency = 1,
-            TextColor3 = themes.Text,
-            TextXAlignment = Enum.TextXAlignment.Left,
-            Font = Enum.Font.Gotham,
-            Parent = sliderFrame
+        Create("UIListLayout", {
+            Padding = UDim.new(0, 10),
+            Parent = contentFrame
         })
         
-        local sliderBG = Create("Frame", {
-            Size = UDim2.new(1, 0, 0, 4),
-            Position = UDim2.new(0, 0, 0.7, 0),
-            BackgroundColor3 = themes.Secondary,
-            Parent = sliderFrame
-        })
+        -- Tab Activation
+        tabButton.MouseButton1Click:Connect(function()
+            for _, v in pairs(mainFrame:GetChildren()) do
+                if v:IsA("ScrollingFrame") and v ~= tabContainer then
+                    v.Visible = false
+                end
+            end
+            contentFrame.Visible = true
+        end)
         
-        Create("UICorner", {
-            CornerRadius = UDim.new(1, 0),
-            Parent = sliderBG
-        })
-        
-        local fill = Create("Frame", {
-            Size = UDim2.new((default - min)/(max - min), 0, 1, 0),
-            BackgroundColor3 = themes.Accent,
-            Parent = sliderBG
-        })
-        
-        Create("UICorner", {
-            CornerRadius = UDim.new(1, 0),
-            Parent = fill
-        })
-        
-        local thumb = Create("Frame", {
-            Size = UDim2.new(0, 12, 0, 12),
-            Position = UDim2.new((default - min)/(max - min), -6, 0.5, -6),
-            BackgroundColor3 = themes.Text,
-            Parent = sliderBG
-        })
-        
-        Create("UICorner", {
-            CornerRadius = UDim.new(1, 0),
-            Parent = thumb
-        })
-        
-        local value = default
-        local dragging = false
-        
-        local function update(input)
-            local pos = input.Position.X - sliderBG.AbsolutePosition.X
-            local size = sliderBG.AbsoluteSize.X
-            local percent = math.clamp(pos / size, 0, 1)
-            value = min + (max - min) * percent
+        -- Section System
+        function tab:Section(name)
+            local section = {}
             
-            Animate(fill, {
-                Size = UDim2.new(percent, 0, 1, 0)
-            }, 0.1)
+            local sectionFrame = Create("Frame", {
+                Size = UDim2.new(1, 0, 0, 30),
+                BackgroundColor3 = NexusLib.Themes.Dark.Secondary,
+                Parent = contentFrame
+            })
             
-            Animate(thumb, {
-                Position = UDim2.new(percent, -6, 0.5, -6)
-            }, 0.1)
+            Create("UICorner", {CornerRadius = UDim.new(0, 5), Parent = sectionFrame})
+            Create("UIStroke", {Color = NexusLib.Themes.Dark.Accent, Parent = sectionFrame})
             
-            label.Text = text .. ": " .. math.floor(value)
-            callback(value)
+            -- Section Content
+            local sectionLabel = Create("TextLabel", {
+                Text = name,
+                Font = Enum.Font.GothamBold,
+                TextSize = 13,
+                TextColor3 = NexusLib.Themes.Dark.Text,
+                Size = UDim2.new(1, -10, 1, 0),
+                Position = UDim2.new(0, 10, 0, 0),
+                BackgroundTransparency = 1,
+                Parent = sectionFrame
+            })
+            
+            local contentContainer = Create("Frame", {
+                Size = UDim2.new(1, -10, 0, 0),
+                Position = UDim2.new(0, 5, 0, 25),
+                BackgroundTransparency = 1,
+                Parent = sectionFrame
+            })
+            
+            Create("UIListLayout", {
+                Padding = UDim.new(0, 5),
+                Parent = contentContainer
+            })
+            
+            -- Button Component
+            function section:Button(text, callback)
+                local button = Create("TextButton", {
+                    Text = text,
+                    Size = UDim2.new(1, 0, 0, 30),
+                    BackgroundColor3 = NexusLib.Themes.Dark.Accent,
+                    TextColor3 = NexusLib.Themes.Dark.Text,
+                    Font = Enum.Font.Gotham,
+                    Parent = contentContainer
+                })
+                
+                Create("UICorner", {CornerRadius = UDim.new(0, 5), Parent = button})
+                AddRippleEffect(button)
+                
+                -- Click Animation
+                button.MouseButton1Click:Connect(function()
+                    TweenService:Create(button, TweenInfo.new(0.1, Enum.EasingStyle.Back), {
+                        Size = UDim2.new(0.95, 0, 0.95, 0)
+                    }):Play()
+                    task.wait(0.1)
+                    TweenService:Create(button, TweenInfo.new(0.2, ANIMATION_SETTINGS.Elastic), {
+                        Size = UDim2.new(1, 0, 1, 0)
+                    }):Play()
+                    callback()
+                end)
+                
+                return button
+            end
+            
+            return section
         end
         
-        sliderBG.InputBegan:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseButton1 then
-                dragging = true
-                update(input)
-            end
-        end)
-        
-        UserInputService.InputChanged:Connect(function(input)
-            if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-                update(input)
-            end
-        end)
-        
-        UserInputService.InputEnded:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseButton1 then
-                dragging = false
-            end
-        end)
-        
-        return sliderFrame
+        return tab
     end
     
-    -- Toggle Constructor
-    function section:AddToggle(text, default, callback)
-        local toggleFrame = Create("Frame", {
-            Size = UDim2.new(1, -20, 0, 30),
-            Position = UDim2.new(0, 10, 0, 0),
-            BackgroundTransparency = 1,
-            Parent = self.ContentFrame
-        })
-        
-        local label = Create("TextLabel", {
-            Text = text,
-            Size = UDim2.new(1, -50, 1, 0),
-            BackgroundTransparency = 1,
-            TextColor3 = themes.Text,
-            TextXAlignment = Enum.TextXAlignment.Left,
-            Font = Enum.Font.Gotham,
-            Parent = toggleFrame
-        })
-        
-        local toggle = Create("Frame", {
-            Size = UDim2.new(0, 40, 0, 20),
-            Position = UDim2.new(1, -40, 0.5, -10),
-            BackgroundColor3 = default and themes.Accent or themes.Secondary,
-            Parent = toggleFrame
-        })
-        
-        Create("UICorner", {
-            CornerRadius = UDim.new(1, 0),
-            Parent = toggle
-        })
-        
-        local thumb = Create("Frame", {
-            Size = UDim2.new(0, 16, 0, 16),
-            Position = UDim2.new(default and 1 or 0, default and -18 or 2, 0.5, -8),
-            BackgroundColor3 = themes.Text,
-            Parent = toggle
-        })
-        
-        Create("UICorner", {
-            CornerRadius = UDim.new(1, 0),
-            Parent = thumb
-        })
-        
-        local enabled = default
-        
-        toggleFrame.InputBegan:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseButton1 then
-                enabled = not enabled
-                
-                Animate(toggle, {
-                    BackgroundColor3 = enabled and themes.Accent or themes.Secondary
-                }, 0.2)
-                
-                Animate(thumb, {
-                    Position = UDim2.new(enabled and 1 or 0, enabled and -18 or 2, 0.5, -8)
-                }, 0.2)
-                
-                callback(enabled)
-            end
-        end)
-        
-        return toggleFrame
-    end
-    
-    return setmetatable(section, section)
+    return window
 end
 
 return NexusLib
