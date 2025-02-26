@@ -1,441 +1,689 @@
-function window:MakeTab(config)
-    local tabName = config.Name or "Tab"
-    local tabButton = InsertTheme(Create("TextButton", tabScroll, {
-        Size = UDim2.new(0, 0, 0, 28),
-        Text = tabName,
-        Font = Enum.Font.GothamSemibold,
-        TextSize = 13,
-        BackgroundColor3 = Theme["Color Secondary"],
+local NexusLib = {
+    Themes = {
+        Dark = {
+            ["Color Primary"] = ColorSequence.new({
+                ColorSequenceKeypoint.new(0, Color3.fromRGB(30, 30, 35)),
+                ColorSequenceKeypoint.new(1, Color3.fromRGB(40, 40, 45))
+            }),
+            ["Color Secondary"] = Color3.fromRGB(50, 50, 55),
+            ["Color Accent"] = Color3.fromRGB(80, 140, 255),
+            ["Color Text"] = Color3.fromRGB(255, 255, 255),
+            ["Color SubText"] = Color3.fromRGB(200, 200, 200),
+            ["Color Stroke"] = Color3.fromRGB(60, 60, 65),
+            ["Color Shadow"] = Color3.fromRGB(20, 20, 25)
+        },
+        Midnight = {
+            ["Color Primary"] = ColorSequence.new({
+                ColorSequenceKeypoint.new(0, Color3.fromRGB(25, 25, 30)),
+                ColorSequenceKeypoint.new(1, Color3.fromRGB(35, 35, 40))
+            }),
+            ["Color Secondary"] = Color3.fromRGB(45, 45, 50),
+            ["Color Accent"] = Color3.fromRGB(160, 80, 255),
+            ["Color Text"] = Color3.fromRGB(255, 255, 255),
+            ["Color SubText"] = Color3.fromRGB(190, 190, 190),
+            ["Color Stroke"] = Color3.fromRGB(50, 50, 55),
+            ["Color Shadow"] = Color3.fromRGB(15, 15, 20)
+        },
+        Nebula = {
+            ["Color Primary"] = ColorSequence.new({
+                ColorSequenceKeypoint.new(0, Color3.fromRGB(35, 25, 45)),
+                ColorSequenceKeypoint.new(1, Color3.fromRGB(50, 35, 60))
+            }),
+            ["Color Secondary"] = Color3.fromRGB(55, 45, 65),
+            ["Color Accent"] = Color3.fromRGB(220, 100, 255),
+            ["Color Text"] = Color3.fromRGB(255, 255, 255),
+            ["Color SubText"] = Color3.fromRGB(180, 180, 200),
+            ["Color Stroke"] = Color3.fromRGB(65, 55, 75),
+            ["Color Shadow"] = Color3.fromRGB(25, 20, 35)
+        }
+    },
+    Settings = {
+        Theme = "Dark",
+        SaveFile = "NexusLib_Config.json"
+    },
+    Instances = {},
+    Tabs = {},
+    Flags = {}
+}
+
+-- Services
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local HttpService = game:GetService("HttpService")
+local Players = game:GetService("Players")
+local CoreGui = game:GetService("CoreGui")
+local Player = Players.LocalPlayer
+
+-- Utility Functions
+local function SetProps(instance, props)
+    for prop, value in pairs(props) do
+        instance[prop] = value
+    end
+    return instance
+end
+
+local function Create(class, parent, props, children)
+    local instance = Instance.new(class)
+    SetProps(instance, props or {})
+    instance.Parent = parent
+    if children then
+        for _, child in pairs(children) do
+            child.Parent = instance
+        end
+    end
+    return instance
+end
+
+local function InsertTheme(instance, type)
+    table.insert(NexusLib.Instances, {Instance = instance, Type = type})
+    return instance
+end
+
+local function MakeDraggable(frame)
+    local dragging, dragStart, startPos
+    frame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+            dragStart = input.Position
+            startPos = frame.Position
+            Tween(frame, "Rotation", 1, 0.1)
+        end
+    end)
+    frame.InputChanged:Connect(function(input)
+        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+            local delta = input.Position - dragStart
+            frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        end
+    end)
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = false
+            Tween(frame, "Rotation", 0, 0.2)
+        end
+    end)
+    return frame
+end
+
+local function Tween(instance, prop, value, time, easingStyle)
+    local tween = TweenService:Create(instance, TweenInfo.new(time or 0.3, easingStyle or Enum.EasingStyle.Quint), {[prop] = value})
+    tween:Play()
+    return tween
+end
+
+-- Theme Management
+local Theme = NexusLib.Themes[NexusLib.Settings.Theme]
+function NexusLib:SetTheme(newTheme)
+    if NexusLib.Themes[newTheme] then
+        NexusLib.Settings.Theme = newTheme
+        Theme = NexusLib.Themes[newTheme]
+        for _, inst in pairs(NexusLib.Instances) do
+            if inst.Type == "Gradient" then
+                Tween(inst.Instance, "Color", Theme["Color Primary"], 0.5, Enum.EasingStyle.Sine)
+            elseif inst.Type == "Frame" then
+                Tween(inst.Instance, "BackgroundColor3", Theme["Color Secondary"], 0.5, Enum.EasingStyle.Sine)
+            elseif inst.Type == "Accent" then
+                Tween(inst.Instance, "BackgroundColor3", Theme["Color Accent"], 0.5, Enum.EasingStyle.Sine)
+            elseif inst.Type == "Text" then
+                Tween(inst.Instance, "TextColor3", Theme["Color Text"], 0.5, Enum.EasingStyle.Sine)
+            elseif inst.Type == "SubText" then
+                Tween(inst.Instance, "TextColor3", Theme["Color SubText"], 0.5, Enum.EasingStyle.Sine)
+            elseif inst.Type == "Stroke" then
+                Tween(inst.Instance, "Color", Theme["Color Stroke"], 0.5, Enum.EasingStyle.Sine)
+            elseif inst.Type == "Shadow" then
+                Tween(inst.Instance, "BackgroundColor3", Theme["Color Shadow"], 0.5, Enum.EasingStyle.Sine)
+            end
+        end
+    end
+end
+
+-- Flag Management
+local function SaveFlags()
+    if writefile then
+        local success, encoded = pcall(HttpService.JSONEncode, HttpService, NexusLib.Flags)
+        if success then
+            writefile(NexusLib.Settings.SaveFile, encoded)
+        end
+    end
+end
+
+local function LoadFlags()
+    if readfile and isfile and isfile(NexusLib.Settings.SaveFile) then
+        local success, data = pcall(HttpService.JSONDecode, HttpService, readfile(NexusLib.Settings.SaveFile))
+        if success then
+            NexusLib.Flags = data
+        end
+    end
+end
+LoadFlags()
+
+local function SetFlag(flag, value)
+    NexusLib.Flags[flag] = value
+    SaveFlags()
+end
+
+local function GetFlag(flag)
+    return NexusLib.Flags[flag]
+end
+
+-- Main Window
+function NexusLib:MakeWindow(config)
+    local name = config.Name or "NexusLib"
+    local saveFile = config.SaveFile or NexusLib.Settings.SaveFile
+    NexusLib.Settings.SaveFile = saveFile
+
+    local screenGui = Create("ScreenGui", CoreGui, {Name = "NexusLib"})
+    local mainFrame = InsertTheme(Create("Frame", screenGui, {
+        Size = UDim2.new(0, 550, 0, 0),
+        Position = UDim2.new(0.5, -275, 0.5, -175),
+        BackgroundTransparency = 1,
+        ClipsDescendants = true
+    }), "Frame")
+    MakeDraggable(mainFrame)
+    Create("UIGradient", mainFrame, {Color = Theme["Color Primary"], Rotation = 45})
+    Create("UICorner", mainFrame, {CornerRadius = UDim.new(0, 12)})
+    local shadow = InsertTheme(Create("Frame", mainFrame, {
+        Size = UDim2.new(1, 10, 1, 10),
+        Position = UDim2.new(0, 5, 0, 5),
+        BackgroundColor3 = Theme["Color Shadow"],
+        BackgroundTransparency = 0.5,
+        ZIndex = -1
+    }), "Shadow")
+    Create("UICorner", shadow, {CornerRadius = UDim.new(0, 12)})
+
+    Tween(mainFrame, "Size", UDim2.new(0, 550, 0, 400), 0.5, Enum.EasingStyle.Back)
+    Tween(mainFrame, "BackgroundTransparency", 0, 0.5, Enum.EasingStyle.Sine)
+
+    local topBar = Create("Frame", mainFrame, {
+        Size = UDim2.new(1, 0, 0, 40),
+        BackgroundTransparency = 1
+    })
+    local title = InsertTheme(Create("TextLabel", topBar, {
+        Size = UDim2.new(0, 0, 1, 0),
+        Position = UDim2.new(0, 15, 0.5, 0),
+        AnchorPoint = Vector2.new(0, 0.5),
+        Text = name,
+        Font = Enum.Font.GothamBold,
+        TextSize = 16,
         BackgroundTransparency = 1,
         TextTransparency = 1,
-        BorderSizePixel = 0
-    }), "Frame")
-    Create("UICorner", tabButton, {CornerRadius = UDim.new(0, 8)})
-    local stroke = Create("UIStroke", tabButton, {Color = Theme["Color Stroke"], Thickness = 1})
-    local selector = InsertTheme(Create("Frame", tabButton, {
-        Size = UDim2.new(0, 3, 0, 0),
-        Position = UDim2.new(0, -3, 0.5, 0),
-        AnchorPoint = Vector2.new(0, 0.5),
-        BackgroundColor3 = Theme["Color Accent"]
-    }), "Accent")
-    Create("UICorner", selector, {CornerRadius = UDim.new(0, 3)})
-    print("Creating tab button for: " .. tabName)
-    Tween(tabButton, "Size", UDim2.new(0, 120, 0, 28), 0.4, Enum.EasingStyle.Back)
-    Tween(tabButton, "BackgroundTransparency", 0.6, 0.4, Enum.EasingStyle.Sine)
-    Tween(tabButton, "TextTransparency", 0, 0.4, Enum.EasingStyle.Sine)
+        TextStrokeTransparency = 0.8
+    }), "Text")
+    Tween(title, "Size", UDim2.new(0, 200, 1, 0), 0.5, Enum.EasingStyle.Quad)
+    Tween(title, "TextTransparency", 0, 0.7, Enum.EasingStyle.Sine)
 
-    local tabContainer = Create("ScrollingFrame", container, {
-        Size = UDim2.new(1, 0, 0, 0),
+    local tabScroll = InsertTheme(Create("ScrollingFrame", mainFrame, {
+        Size = UDim2.new(0, 0, 1, -40),
+        Position = UDim2.new(0, 0, 0, 40),
         BackgroundTransparency = 1,
         ScrollBarThickness = 3,
         ScrollBarImageColor3 = Theme["Color Accent"],
         CanvasSize = UDim2.new(0, 0, 0, 0),
         AutomaticCanvasSize = Enum.AutomaticSize.Y,
-        Visible = false,
         ScrollBarImageTransparency = 1
+    }), "Accent")
+    Create("UIListLayout", tabScroll, {Padding = UDim.new(0, 6), HorizontalAlignment = Enum.HorizontalAlignment.Center})
+    Create("UIPadding", tabScroll, {PaddingTop = UDim.new(0, 10)})
+    Tween(tabScroll, "Size", UDim2.new(0, 140, 1, -40), 0.6, Enum.EasingStyle.Back)
+    Tween(tabScroll, "ScrollBarImageTransparency", 0.3, 0.6, Enum.EasingStyle.Sine)
+
+    local container = Create("Frame", mainFrame, {
+        Size = UDim2.new(0, 0, 1, -40),
+        Position = UDim2.new(0, 140, 0, 40),
+        BackgroundTransparency = 1,
+        ClipsDescendants = true
     })
-    print("Creating tab container for: " .. tabName)
-    Create("UIListLayout", tabContainer, {Padding = UDim.new(0, 8)})
-    Create("UIPadding", tabContainer, {PaddingTop = UDim.new(0, 10), PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10)})
+    Tween(container, "Size", UDim2.new(1, -140, 1, -40), 0.6, Enum.EasingStyle.Back)
 
-    tabButton.MouseButton1Click:Connect(function()
-        print("Clicking tab: " .. tabName)
-        for _, tab in pairs(NexusLib.Tabs) do
-            Tween(tab.Container, "Size", UDim2.new(1, 0, 0, 0), 0.3, Enum.EasingStyle.Quad)
-            tab.Container.Visible = false
-            Tween(tab.Button, "BackgroundTransparency", 0.6, 0.2)
-            Tween(tab.Button.Selector, "Size", UDim2.new(0, 3, 0, 0), 0.2, Enum.EasingStyle.Quad)
-        end
-        tabContainer.Visible = true
-        Tween(tabContainer, "Size", UDim2.new(1, 0, 1, 0), 0.3, Enum.EasingStyle.Back)
-        Tween(tabButton, "BackgroundTransparency", 0.3, 0.2)
-        Tween(selector, "Size", UDim2.new(0, 3, 0, 20), 0.2, Enum.EasingStyle.Quad)
-        Tween(tabContainer, "ScrollBarImageTransparency", 0.3, 0.3, Enum.EasingStyle.Sine)
-    end)
-
-    tabButton.MouseEnter:Connect(function()
-        Tween(tabButton, "BackgroundTransparency", 0.4, 0.2)
-        Tween(stroke, "Thickness", 1.5, 0.2)
-    end)
-    tabButton.MouseLeave:Connect(function()
-        if not tabContainer.Visible then
-            Tween(tabButton, "BackgroundTransparency", 0.6, 0.2)
-        end
-        Tween(stroke, "Thickness", 1, 0.2)
-    end)
-
-    if #NexusLib.Tabs == 0 then
-        print("First tab activated: " .. tabName)
-        tabContainer.Visible = true
-        Tween(tabContainer, "Size", UDim2.new(1, 0, 1, 0), 0.5, Enum.EasingStyle.Back)
-        tabButton.BackgroundTransparency = 0.3
-        Tween(selector, "Size", UDim2.new(0, 3, 0, 20), 0.2, Enum.EasingStyle.Quad)
-        Tween(tabContainer, "ScrollBarImageTransparency", 0.3, 0.5, Enum.EasingStyle.Sine)
-    end
-    tabButton.Selector = selector
-
-    local tab = {Button = tabButton, Container = tabContainer}
-    table.insert(NexusLib.Tabs, tab)
-    print("Tab " .. tabName .. " created and added to NexusLib.Tabs")
-
-    -- Tab Elements
-    function tab:AddButton(config)
-        local title = config.Name or "Button"
-        local callback = config.Callback or function() end
-
-        local button = InsertTheme(Create("TextButton", tabContainer, {
-            Size = UDim2.new(0, 0, 0, 40),
-            Text = title,
+    local window = {}
+    function window:MakeTab(config)
+        local tabName = config.Name or "Tab"
+        local tabButton = InsertTheme(Create("TextButton", tabScroll, {
+            Size = UDim2.new(0, 0, 0, 28),
+            Text = tabName,
             Font = Enum.Font.GothamSemibold,
-            TextSize = 14,
+            TextSize = 13,
             BackgroundColor3 = Theme["Color Secondary"],
             BackgroundTransparency = 1,
             TextTransparency = 1,
             BorderSizePixel = 0
         }), "Frame")
-        Create("UICorner", button, {CornerRadius = UDim.new(0, 10)})
-        local stroke = Create("UIStroke", button, {Color = Theme["Color Stroke"], Thickness = 1})
-        print("Adding button: " .. title .. " to tab " .. tabName)
-        Tween(button, "Size", UDim2.new(1, 0, 0, 40), 0.4, Enum.EasingStyle.Back)
-        Tween(button, "BackgroundTransparency", 0.2, 0.4, Enum.EasingStyle.Sine)
-        Tween(button, "TextTransparency", 0, 0.4, Enum.EasingStyle.Sine)
-
-        button.MouseButton1Click:Connect(function()
-            callback()
-            Tween(button, "Size", UDim2.new(1, 2, 0, 42), 0.1, Enum.EasingStyle.Quad)
-            Tween(button, "Size", UDim2.new(1, 0, 0, 40), 0.1, Enum.EasingStyle.Quad)
-            Tween(stroke, "Color", Theme["Color Accent"], 0.1)
-            Tween(stroke, "Color", Theme["Color Stroke"], 0.1)
-        end)
-        button.MouseEnter:Connect(function()
-            Tween(button, "BackgroundTransparency", 0, 0.2)
-            Tween(stroke, "Thickness", 1.5, 0.2)
-            Tween(button, "TextColor3", Theme["Color Accent"], 0.2)
-        end)
-        button.MouseLeave:Connect(function()
-            Tween(button, "BackgroundTransparency", 0.2, 0.2)
-            Tween(stroke, "Thickness", 1, 0.2)
-            Tween(button, "TextColor3", Theme["Color Text"], 0.2)
-        end)
-
-        return {Set = function(newTitle)
-            Tween(button, "TextTransparency", 1, 0.2)
-            button.Text = newTitle
-            Tween(button, "TextTransparency", 0, 0.2)
-        end}
-    end
-
-    function tab:AddToggle(config)
-        local title = config.Name or "Toggle"
-        local default = config.Default or false
-        local flag = config.Flag
-        local callback = config.Callback or function() end
-        if flag and GetFlag(flag) ~= nil then default = GetFlag(flag) end
-
-        local frame = Create("Frame", tabContainer, {
-            Size = UDim2.new(0, 0, 0, 40),
-            BackgroundTransparency = 1
-        })
-        print("Adding toggle: " .. title .. " to tab " .. tabName)
-        Tween(frame, "Size", UDim2.new(1, 0, 0, 40), 0.4, Enum.EasingStyle.Back)
-
-        local label = InsertTheme(Create("TextLabel", frame, {
-            Size = UDim2.new(1, -50, 1, 0),
-            Text = title,
-            Font = Enum.Font.GothamSemibold,
-            TextSize = 14,
-            BackgroundTransparency = 1,
-            TextTransparency = 1
-        }), "Text")
-        Tween(label, "TextTransparency", 0, 0.4, Enum.EasingStyle.Sine)
-
-        local toggle = InsertTheme(Create("Frame", frame, {
-            Size = UDim2.new(0, 0, 0, 20),
-            Position = UDim2.new(1, -10, 0.5, 0),
-            AnchorPoint = Vector2.new(1, 0.5),
-            BackgroundColor3 = Theme["Color Stroke"],
-            BackgroundTransparency = 1
-        }), "Stroke")
-        Create("UICorner", toggle, {CornerRadius = UDim.new(0, 10)})
-        Tween(toggle, "Size", UDim2.new(0, 40, 0, 20), 0.3, Enum.EasingStyle.Back)
-        Tween(toggle, "BackgroundTransparency", 0.2, 0.3, Enum.EasingStyle.Sine)
-
-        local indicator = InsertTheme(Create("Frame", toggle, {
-            Size = default and UDim2.new(0, 18, 0, 18) or UDim2.new(0, 18, 0, 18),
-            Position = default and UDim2.new(1, -2, 0.5, 0) or UDim2.new(0, 2, 0.5, 0),
-            AnchorPoint = Vector2.new(0.5, 0.5),
-            BackgroundColor3 = default and Theme["Color Accent"] or Theme["Color SubText"],
-            BackgroundTransparency = 1
+        Create("UICorner", tabButton, {CornerRadius = UDim.new(0, 8)})
+        local stroke = Create("UIStroke", tabButton, {Color = Theme["Color Stroke"], Thickness = 1})
+        local selector = InsertTheme(Create("Frame", tabButton, {
+            Size = UDim2.new(0, 3, 0, 0),
+            Position = UDim2.new(0, -3, 0.5, 0),
+            AnchorPoint = Vector2.new(0, 0.5),
+            BackgroundColor3 = Theme["Color Accent"]
         }), "Accent")
-        Create("UICorner", indicator, {CornerRadius = UDim.new(0, 9)})
-        Tween(indicator, "BackgroundTransparency", 0, 0.3, Enum.EasingStyle.Sine)
+        Create("UICorner", selector, {CornerRadius = UDim.new(0, 3)})
+        print("Creating tab button for: " .. tabName)
+        Tween(tabButton, "Size", UDim2.new(0, 120, 0, 28), 0.4, Enum.EasingStyle.Back)
+        Tween(tabButton, "BackgroundTransparency", 0.6, 0.4, Enum.EasingStyle.Sine)
+        Tween(tabButton, "TextTransparency", 0, 0.4, Enum.EasingStyle.Sine)
 
-        local function update(state)
-            if state then
-                Tween(indicator, "Position", UDim2.new(1, -2, 0.5, 0), 0.2, Enum.EasingStyle.Quad)
-                Tween(indicator, "BackgroundColor3", Theme["Color Accent"], 0.2, Enum.EasingStyle.Sine)
-                Tween(toggle, "BackgroundTransparency", 0, 0.2)
-            else
-                Tween(indicator, "Position", UDim2.new(0, 2, 0.5, 0), 0.2, Enum.EasingStyle.Quad)
-                Tween(indicator, "BackgroundColor3", Theme["Color SubText"], 0.2, Enum.EasingStyle.Sine)
-                Tween(toggle, "BackgroundTransparency", 0.2, 0.2)
-            end
-            if flag then SetFlag(flag, state) end
-            callback(state)
-        end
-
-        frame.InputBegan:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseButton1 then
-                default = not default
-                update(default)
-                Tween(indicator, "Size", UDim2.new(0, 20, 0, 20), 0.1)
-                Tween(indicator, "Size", UDim2.new(0, 18, 0, 18), 0.1)
-            end
-        end)
-
-        update(default)
-        return {Set = function(val) default = val update(val) end}
-    end
-
-    function tab:AddDropdown(config)
-        local title = config.Name or "Dropdown"
-        local options = config.Options or {}
-        local default = config.Default or options[1]
-        local flag = config.Flag
-        local callback = config.Callback or function() end
-        if flag and GetFlag(flag) then default = GetFlag(flag) end
-
-        local frame = Create("Frame", tabContainer, {
-            Size = UDim2.new(0, 0, 0, 40),
-            BackgroundTransparency = 1
-        })
-        print("Adding dropdown: " .. title .. " to tab " .. tabName)
-        Tween(frame, "Size", UDim2.new(1, 0, 0, 40), 0.4, Enum.EasingStyle.Back)
-
-        local label = InsertTheme(Create("TextLabel", frame, {
-            Size = UDim2.new(1, -120, 1, 0),
-            Text = title,
-            Font = Enum.Font.GothamSemibold,
-            TextSize = 14,
+        local tabContainer = Create("ScrollingFrame", container, {
+            Size = UDim2.new(1, 0, 0, 0),
             BackgroundTransparency = 1,
-            TextTransparency = 1
-        }), "Text")
-        Tween(label, "TextTransparency", 0, 0.4, Enum.EasingStyle.Sine)
-
-        local dropdown = InsertTheme(Create("TextButton", frame, {
-            Size = UDim2.new(0, 0, 0, 30),
-            Position = UDim2.new(1, -10, 0.5, 0),
-            AnchorPoint = Vector2.new(1, 0.5),
-            Text = tostring(default),
-            Font = Enum.Font.GothamBold,
-            TextSize = 12,
-            BackgroundColor3 = Theme["Color Secondary"],
-            BackgroundTransparency = 1,
-            TextTransparency = 1,
-            BorderSizePixel = 0
-        }), "Frame")
-        Create("UICorner", dropdown, {CornerRadius = UDim.new(0, 8)})
-        Create("UIStroke", dropdown, {Color = Theme["Color Stroke"], Thickness = 1})
-        Tween(dropdown, "Size", UDim2.new(0, 100, 0, 30), 0.3, Enum.EasingStyle.Back)
-        Tween(dropdown, "BackgroundTransparency", 0.2, 0.3, Enum.EasingStyle.Sine)
-        Tween(dropdown, "TextTransparency", 0, 0.3, Enum.EasingStyle.Sine)
-
-        local dropFrame = Create("Frame", screenGui, {
-            Size = UDim2.new(0, 100, 0, 0),
-            Position = UDim2.new(0, dropdown.AbsolutePosition.X, 0, dropdown.AbsolutePosition.Y + 35),
-            BackgroundColor3 = Theme["Color Secondary"],
-            Visible = false,
-            ClipsDescendants = true,
-            BackgroundTransparency = 1,
-            BorderSizePixel = 0
-        })
-        Create("UICorner", dropFrame, {CornerRadius = UDim.new(0, 8)})
-        local shadow = InsertTheme(Create("Frame", dropFrame, {
-            Size = UDim2.new(1, 8, 1, 8),
-            Position = UDim2.new(0, 4, 0, 4),
-            BackgroundColor3 = Theme["Color Shadow"],
-            BackgroundTransparency = 0.6,
-            ZIndex = -1
-        }), "Shadow")
-        Create("UICorner", shadow, {CornerRadius = UDim.new(0, 8)})
-        local dropList = Create("ScrollingFrame", dropFrame, {
-            Size = UDim2.new(1, 0, 1, 0),
-            BackgroundTransparency = 1,
-            ScrollBarThickness = 2,
+            ScrollBarThickness = 3,
             ScrollBarImageColor3 = Theme["Color Accent"],
-            CanvasSize = UDim2.new(0, 0, 0, #options * 30),
+            CanvasSize = UDim2.new(0, 0, 0, 0),
+            AutomaticCanvasSize = Enum.AutomaticSize.Y,
+            Visible = false,
             ScrollBarImageTransparency = 1
         })
-        Create("UIListLayout", dropList, {Padding = UDim.new(0, 4)})
-        Create("UIPadding", dropList, {PaddingTop = UDim.new(0, 5), PaddingBottom = UDim.new(0, 5)})
+        print("Creating tab container for: " .. tabName)
+        Create("UIListLayout", tabContainer, {Padding = UDim.new(0, 8)})
+        Create("UIPadding", tabContainer, {PaddingTop = UDim.new(0, 10), PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10)})
 
-        for i, option in pairs(options) do
-            local optButton = InsertTheme(Create("TextButton", dropList, {
-                Size = UDim2.new(0, 0, 0, 25),
-                Text = tostring(option),
-                Font = Enum.Font.GothamMedium,
+        tabButton.MouseButton1Click:Connect(function()
+            print("Clicking tab: " .. tabName)
+            for _, tab in pairs(NexusLib.Tabs) do
+                Tween(tab.Container, "Size", UDim2.new(1, 0, 0, 0), 0.3, Enum.EasingStyle.Quad)
+                tab.Container.Visible = false
+                Tween(tab.Button, "BackgroundTransparency", 0.6, 0.2)
+                Tween(tab.Button.Selector, "Size", UDim2.new(0, 3, 0, 0), 0.2, Enum.EasingStyle.Quad)
+            end
+            tabContainer.Visible = true
+            Tween(tabContainer, "Size", UDim2.new(1, 0, 1, 0), 0.3, Enum.EasingStyle.Back)
+            Tween(tabButton, "BackgroundTransparency", 0.3, 0.2)
+            Tween(selector, "Size", UDim2.new(0, 3, 0, 20), 0.2, Enum.EasingStyle.Quad)
+            Tween(tabContainer, "ScrollBarImageTransparency", 0.3, 0.3, Enum.EasingStyle.Sine)
+        end)
+
+        tabButton.MouseEnter:Connect(function()
+            Tween(tabButton, "BackgroundTransparency", 0.4, 0.2)
+            Tween(stroke, "Thickness", 1.5, 0.2)
+        end)
+        tabButton.MouseLeave:Connect(function()
+            if not tabContainer.Visible then
+                Tween(tabButton, "BackgroundTransparency", 0.6, 0.2)
+            end
+            Tween(stroke, "Thickness", 1, 0.2)
+        end)
+
+        if #NexusLib.Tabs == 0 then
+            print("First tab activated: " .. tabName)
+            tabContainer.Visible = true
+            Tween(tabContainer, "Size", UDim2.new(1, 0, 1, 0), 0.5, Enum.EasingStyle.Back)
+            tabButton.BackgroundTransparency = 0.3
+            Tween(selector, "Size", UDim2.new(0, 3, 0, 20), 0.2, Enum.EasingStyle.Quad)
+            Tween(tabContainer, "ScrollBarImageTransparency", 0.3, 0.5, Enum.EasingStyle.Sine)
+        end
+        tabButton.Selector = selector
+
+        local tab = {Button = tabButton, Container = tabContainer}
+        table.insert(NexusLib.Tabs, tab)
+        print("Tab " .. tabName .. " created and added to NexusLib.Tabs")
+
+        -- Tab Elements
+        function tab:AddButton(config)
+            local title = config.Name or "Button"
+            local callback = config.Callback or function() end
+
+            local button = InsertTheme(Create("TextButton", tabContainer, {
+                Size = UDim2.new(0, 0, 0, 40),
+                Text = title,
+                Font = Enum.Font.GothamSemibold,
+                TextSize = 14,
+                BackgroundColor3 = Theme["Color Secondary"],
+                BackgroundTransparency = 1,
+                TextTransparency = 1,
+                BorderSizePixel = 0
+            }), "Frame")
+            Create("UICorner", button, {CornerRadius = UDim.new(0, 10)})
+            local stroke = Create("UIStroke", button, {Color = Theme["Color Stroke"], Thickness = 1})
+            print("Adding button: " .. title .. " to tab " .. tabName)
+            Tween(button, "Size", UDim2.new(1, 0, 0, 40), 0.4, Enum.EasingStyle.Back)
+            Tween(button, "BackgroundTransparency", 0.2, 0.4, Enum.EasingStyle.Sine)
+            Tween(button, "TextTransparency", 0, 0.4, Enum.EasingStyle.Sine)
+
+            button.MouseButton1Click:Connect(function()
+                callback()
+                Tween(button, "Size", UDim2.new(1, 2, 0, 42), 0.1, Enum.EasingStyle.Quad)
+                Tween(button, "Size", UDim2.new(1, 0, 0, 40), 0.1, Enum.EasingStyle.Quad)
+                Tween(stroke, "Color", Theme["Color Accent"], 0.1)
+                Tween(stroke, "Color", Theme["Color Stroke"], 0.1)
+            end)
+            button.MouseEnter:Connect(function()
+                Tween(button, "BackgroundTransparency", 0, 0.2)
+                Tween(stroke, "Thickness", 1.5, 0.2)
+                Tween(button, "TextColor3", Theme["Color Accent"], 0.2)
+            end)
+            button.MouseLeave:Connect(function()
+                Tween(button, "BackgroundTransparency", 0.2, 0.2)
+                Tween(stroke, "Thickness", 1, 0.2)
+                Tween(button, "TextColor3", Theme["Color Text"], 0.2)
+            end)
+
+            return {Set = function(newTitle)
+                Tween(button, "TextTransparency", 1, 0.2)
+                button.Text = newTitle
+                Tween(button, "TextTransparency", 0, 0.2)
+            end}
+        end
+
+        function tab:AddToggle(config)
+            local title = config.Name or "Toggle"
+            local default = config.Default or false
+            local flag = config.Flag
+            local callback = config.Callback or function() end
+            if flag and GetFlag(flag) ~= nil then default = GetFlag(flag) end
+
+            local frame = Create("Frame", tabContainer, {
+                Size = UDim2.new(0, 0, 0, 40),
+                BackgroundTransparency = 1
+            })
+            print("Adding toggle: " .. title .. " to tab " .. tabName)
+            Tween(frame, "Size", UDim2.new(1, 0, 0, 40), 0.4, Enum.EasingStyle.Back)
+
+            local label = InsertTheme(Create("TextLabel", frame, {
+                Size = UDim2.new(1, -50, 1, 0),
+                Text = title,
+                Font = Enum.Font.GothamSemibold,
+                TextSize = 14,
+                BackgroundTransparency = 1,
+                TextTransparency = 1
+            }), "Text")
+            Tween(label, "TextTransparency", 0, 0.4, Enum.EasingStyle.Sine)
+
+            local toggle = InsertTheme(Create("Frame", frame, {
+                Size = UDim2.new(0, 0, 0, 20),
+                Position = UDim2.new(1, -10, 0.5, 0),
+                AnchorPoint = Vector2.new(1, 0.5),
+                BackgroundColor3 = Theme["Color Stroke"],
+                BackgroundTransparency = 1
+            }), "Stroke")
+            Create("UICorner", toggle, {CornerRadius = UDim.new(0, 10)})
+            Tween(toggle, "Size", UDim2.new(0, 40, 0, 20), 0.3, Enum.EasingStyle.Back)
+            Tween(toggle, "BackgroundTransparency", 0.2, 0.3, Enum.EasingStyle.Sine)
+
+            local indicator = InsertTheme(Create("Frame", toggle, {
+                Size = default and UDim2.new(0, 18, 0, 18) or UDim2.new(0, 18, 0, 18),
+                Position = default and UDim2.new(1, -2, 0.5, 0) or UDim2.new(0, 2, 0.5, 0),
+                AnchorPoint = Vector2.new(0.5, 0.5),
+                BackgroundColor3 = default and Theme["Color Accent"] or Theme["Color SubText"],
+                BackgroundTransparency = 1
+            }), "Accent")
+            Create("UICorner", indicator, {CornerRadius = UDim.new(0, 9)})
+            Tween(indicator, "BackgroundTransparency", 0, 0.3, Enum.EasingStyle.Sine)
+
+            local function update(state)
+                if state then
+                    Tween(indicator, "Position", UDim2.new(1, -2, 0.5, 0), 0.2, Enum.EasingStyle.Quad)
+                    Tween(indicator, "BackgroundColor3", Theme["Color Accent"], 0.2, Enum.EasingStyle.Sine)
+                    Tween(toggle, "BackgroundTransparency", 0, 0.2)
+                else
+                    Tween(indicator, "Position", UDim2.new(0, 2, 0.5, 0), 0.2, Enum.EasingStyle.Quad)
+                    Tween(indicator, "BackgroundColor3", Theme["Color SubText"], 0.2, Enum.EasingStyle.Sine)
+                    Tween(toggle, "BackgroundTransparency", 0.2, 0.2)
+                end
+                if flag then SetFlag(flag, state) end
+                callback(state)
+            end
+
+            frame.InputBegan:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                    default = not default
+                    update(default)
+                    Tween(indicator, "Size", UDim2.new(0, 20, 0, 20), 0.1)
+                    Tween(indicator, "Size", UDim2.new(0, 18, 0, 18), 0.1)
+                end
+            end)
+
+            update(default)
+            return {Set = function(val) default = val update(val) end}
+        end
+
+        function tab:AddDropdown(config)
+            local title = config.Name or "Dropdown"
+            local options = config.Options or {}
+            local default = config.Default or options[1]
+            local flag = config.Flag
+            local callback = config.Callback or function() end
+            if flag and GetFlag(flag) then default = GetFlag(flag) end
+
+            local frame = Create("Frame", tabContainer, {
+                Size = UDim2.new(0, 0, 0, 40),
+                BackgroundTransparency = 1
+            })
+            print("Adding dropdown: " .. title .. " to tab " .. tabName)
+            Tween(frame, "Size", UDim2.new(1, 0, 0, 40), 0.4, Enum.EasingStyle.Back)
+
+            local label = InsertTheme(Create("TextLabel", frame, {
+                Size = UDim2.new(1, -120, 1, 0),
+                Text = title,
+                Font = Enum.Font.GothamSemibold,
+                TextSize = 14,
+                BackgroundTransparency = 1,
+                TextTransparency = 1
+            }), "Text")
+            Tween(label, "TextTransparency", 0, 0.4, Enum.EasingStyle.Sine)
+
+            local dropdown = InsertTheme(Create("TextButton", frame, {
+                Size = UDim2.new(0, 0, 0, 30),
+                Position = UDim2.new(1, -10, 0.5, 0),
+                AnchorPoint = Vector2.new(1, 0.5),
+                Text = tostring(default),
+                Font = Enum.Font.GothamBold,
                 TextSize = 12,
                 BackgroundColor3 = Theme["Color Secondary"],
                 BackgroundTransparency = 1,
                 TextTransparency = 1,
                 BorderSizePixel = 0
             }), "Frame")
-            Create("UICorner", optButton, {CornerRadius = UDim.new(0, 6)})
-            Create("UIStroke", optButton, {Color = Theme["Color Stroke"], Thickness = 0.5})
-            Tween(optButton, "Size", UDim2.new(1, -10, 0, 25), 0.3, Enum.EasingStyle.Back)
-            Tween(optButton, "BackgroundTransparency", 0.4, 0.3 + i * 0.05, Enum.EasingStyle.Sine)
-            Tween(optButton, "TextTransparency", 0, 0.3 + i * 0.05, Enum.EasingStyle.Sine)
+            Create("UICorner", dropdown, {CornerRadius = UDim.new(0, 8)})
+            Create("UIStroke", dropdown, {Color = Theme["Color Stroke"], Thickness = 1})
+            Tween(dropdown, "Size", UDim2.new(0, 100, 0, 30), 0.3, Enum.EasingStyle.Back)
+            Tween(dropdown, "BackgroundTransparency", 0.2, 0.3, Enum.EasingStyle.Sine)
+            Tween(dropdown, "TextTransparency", 0, 0.3, Enum.EasingStyle.Sine)
 
-            optButton.MouseButton1Click:Connect(function()
-                default = option
+            local dropFrame = Create("Frame", screenGui, {
+                Size = UDim2.new(0, 100, 0, 0),
+                Position = UDim2.new(0, dropdown.AbsolutePosition.X, 0, dropdown.AbsolutePosition.Y + 35),
+                BackgroundColor3 = Theme["Color Secondary"],
+                Visible = false,
+                ClipsDescendants = true,
+                BackgroundTransparency = 1,
+                BorderSizePixel = 0
+            })
+            Create("UICorner", dropFrame, {CornerRadius = UDim.new(0, 8)})
+            local shadow = InsertTheme(Create("Frame", dropFrame, {
+                Size = UDim2.new(1, 8, 1, 8),
+                Position = UDim2.new(0, 4, 0, 4),
+                BackgroundColor3 = Theme["Color Shadow"],
+                BackgroundTransparency = 0.6,
+                ZIndex = -1
+            }), "Shadow")
+            Create("UICorner", shadow, {CornerRadius = UDim.new(0, 8)})
+            local dropList = Create("ScrollingFrame", dropFrame, {
+                Size = UDim2.new(1, 0, 1, 0),
+                BackgroundTransparency = 1,
+                ScrollBarThickness = 2,
+                ScrollBarImageColor3 = Theme["Color Accent"],
+                CanvasSize = UDim2.new(0, 0, 0, #options * 30),
+                ScrollBarImageTransparency = 1
+            })
+            Create("UIListLayout", dropList, {Padding = UDim.new(0, 4)})
+            Create("UIPadding", dropList, {PaddingTop = UDim.new(0, 5), PaddingBottom = UDim.new(0, 5)})
+
+            for i, option in pairs(options) do
+                local optButton = InsertTheme(Create("TextButton", dropList, {
+                    Size = UDim2.new(0, 0, 0, 25),
+                    Text = tostring(option),
+                    Font = Enum.Font.GothamMedium,
+                    TextSize = 12,
+                    BackgroundColor3 = Theme["Color Secondary"],
+                    BackgroundTransparency = 1,
+                    TextTransparency = 1,
+                    BorderSizePixel = 0
+                }), "Frame")
+                Create("UICorner", optButton, {CornerRadius = UDim.new(0, 6)})
+                Create("UIStroke", optButton, {Color = Theme["Color Stroke"], Thickness = 0.5})
+                Tween(optButton, "Size", UDim2.new(1, -10, 0, 25), 0.3, Enum.EasingStyle.Back)
+                Tween(optButton, "BackgroundTransparency", 0.4, 0.3 + i * 0.05, Enum.EasingStyle.Sine)
+                Tween(optButton, "TextTransparency", 0, 0.3 + i * 0.05, Enum.EasingStyle.Sine)
+
+                optButton.MouseButton1Click:Connect(function()
+                    default = option
+                    Tween(dropdown, "TextTransparency", 1, 0.2)
+                    dropdown.Text = tostring(option)
+                    Tween(dropdown, "TextTransparency", 0, 0.2)
+                    Tween(dropFrame, "Size", UDim2.new(0, 100, 0, 0), 0.3, Enum.EasingStyle.Quad)
+                    dropFrame.Visible = false
+                    if flag then SetFlag(flag, option) end
+                    callback(option)
+                end)
+                optButton.MouseEnter:Connect(function()
+                    Tween(optButton, "BackgroundTransparency", 0.2, 0.2)
+                    Tween(optButton, "TextColor3", Theme["Color Accent"], 0.2)
+                end)
+                optButton.MouseLeave:Connect(function()
+                    Tween(optButton, "BackgroundTransparency", 0.4, 0.2)
+                    Tween(optButton, "TextColor3", Theme["Color Text"], 0.2)
+                end)
+            end
+
+            dropdown.MouseButton1Click:Connect(function()
+                dropFrame.Visible = not dropFrame.Visible
+                if dropFrame.Visible then
+                    Tween(dropFrame, "Size", UDim2.new(0, 100, 0, math.min(#options * 30, 120)), 0.3, Enum.EasingStyle.Back)
+                    Tween(dropFrame, "BackgroundTransparency", 0.2, 0.3, Enum.EasingStyle.Sine)
+                    Tween(dropList, "ScrollBarImageTransparency", 0.3, 0.3, Enum.EasingStyle.Sine)
+                    Tween(dropdown, "Rotation", 3, 0.1)
+                    Tween(dropdown, "Rotation", 0, 0.1)
+                else
+                    Tween(dropFrame, "Size", UDim2.new(0, 100, 0, 0), 0.3, Enum.EasingStyle.Quad)
+                    Tween(dropFrame, "BackgroundTransparency", 1, 0.3, Enum.EasingStyle.Sine)
+                    Tween(dropList, "ScrollBarImageTransparency", 1, 0.3, Enum.EasingStyle.Sine)
+                end
+            end)
+
+            return {Set = function(val)
+                default = val
                 Tween(dropdown, "TextTransparency", 1, 0.2)
-                dropdown.Text = tostring(option)
+                dropdown.Text = tostring(val)
                 Tween(dropdown, "TextTransparency", 0, 0.2)
-                Tween(dropFrame, "Size", UDim2.new(0, 100, 0, 0), 0.3, Enum.EasingStyle.Quad)
-                dropFrame.Visible = false
-                if flag then SetFlag(flag, option) end
-                callback(option)
-            end)
-            optButton.MouseEnter:Connect(function()
-                Tween(optButton, "BackgroundTransparency", 0.2, 0.2)
-                Tween(optButton, "TextColor3", Theme["Color Accent"], 0.2)
-            end)
-            optButton.MouseLeave:Connect(function()
-                Tween(optButton, "BackgroundTransparency", 0.4, 0.2)
-                Tween(optButton, "TextColor3", Theme["Color Text"], 0.2)
-            end)
+            end}
         end
 
-        dropdown.MouseButton1Click:Connect(function()
-            dropFrame.Visible = not dropFrame.Visible
-            if dropFrame.Visible then
-                Tween(dropFrame, "Size", UDim2.new(0, 100, 0, math.min(#options * 30, 120)), 0.3, Enum.EasingStyle.Back)
-                Tween(dropFrame, "BackgroundTransparency", 0.2, 0.3, Enum.EasingStyle.Sine)
-                Tween(dropList, "ScrollBarImageTransparency", 0.3, 0.3, Enum.EasingStyle.Sine)
-                Tween(dropdown, "Rotation", 3, 0.1)
-                Tween(dropdown, "Rotation", 0, 0.1)
-            else
-                Tween(dropFrame, "Size", UDim2.new(0, 100, 0, 0), 0.3, Enum.EasingStyle.Quad)
-                Tween(dropFrame, "BackgroundTransparency", 1, 0.3, Enum.EasingStyle.Sine)
-                Tween(dropList, "ScrollBarImageTransparency", 1, 0.3, Enum.EasingStyle.Sine)
-            end
-        end)
+        function tab:AddSlider(config)
+            local title = config.Name or "Slider"
+            local min = config.Min or 0
+            local max = config.Max or 100
+            local default = config.Default or min
+            local flag = config.Flag
+            local callback = config.Callback or function() end
+            if flag and GetFlag(flag) then default = GetFlag(flag) end
 
-        return {Set = function(val)
-            default = val
-            Tween(dropdown, "TextTransparency", 1, 0.2)
-            dropdown.Text = tostring(val)
-            Tween(dropdown, "TextTransparency", 0, 0.2)
-        end}
-    end
+            local frame = Create("Frame", tabContainer, {
+                Size = UDim2.new(0, 0, 0, 50),
+                BackgroundTransparency = 1
+            })
+            print("Adding slider: " .. title .. " to tab " .. tabName)
+            Tween(frame, "Size", UDim2.new(1, 0, 0, 50), 0.4, Enum.EasingStyle.Back)
 
-    function tab:AddSlider(config)
-        local title = config.Name or "Slider"
-        local min = config.Min or 0
-        local max = config.Max or 100
-        local default = config.Default or min
-        local flag = config.Flag
-        local callback = config.Callback or function() end
-        if flag and GetFlag(flag) then default = GetFlag(flag) end
+            local label = InsertTheme(Create("TextLabel", frame, {
+                Size = UDim2.new(1, -50, 0, 20),
+                Text = title,
+                Font = Enum.Font.GothamSemibold,
+                TextSize = 14,
+                BackgroundTransparency = 1,
+                TextTransparency = 1
+            }), "Text")
+            Tween(label, "TextTransparency", 0, 0.4, Enum.EasingStyle.Sine)
 
-        local frame = Create("Frame", tabContainer, {
-            Size = UDim2.new(0, 0, 0, 50),
-            BackgroundTransparency = 1
-        })
-        print("Adding slider: " .. title .. " to tab " .. tabName)
-        Tween(frame, "Size", UDim2.new(1, 0, 0, 50), 0.4, Enum.EasingStyle.Back)
+            local valueLabel = InsertTheme(Create("TextLabel", frame, {
+                Size = UDim2.new(0, 0, 0, 20),
+                Position = UDim2.new(1, -10, 0, 0),
+                AnchorPoint = Vector2.new(1, 0),
+                Text = tostring(default),
+                Font = Enum.Font.GothamBold,
+                TextSize = 12,
+                BackgroundTransparency = 1,
+                TextTransparency = 1
+            }), "Text")
+            Tween(valueLabel, "Size", UDim2.new(0, 40, 0, 20), 0.3, Enum.EasingStyle.Back)
+            Tween(valueLabel, "TextTransparency", 0, 0.3, Enum.EasingStyle.Sine)
 
-        local label = InsertTheme(Create("TextLabel", frame, {
-            Size = UDim2.new(1, -50, 0, 20),
-            Text = title,
-            Font = Enum.Font.GothamSemibold,
-            TextSize = 14,
-            BackgroundTransparency = 1,
-            TextTransparency = 1
-        }), "Text")
-        Tween(label, "TextTransparency", 0, 0.4, Enum.EasingStyle.Sine)
+            local sliderBar = InsertTheme(Create("Frame", frame, {
+                Size = UDim2.new(0, 0, 0, 4),
+                Position = UDim2.new(0, 5, 0, 30),
+                BackgroundColor3 = Theme["Color Stroke"],
+                BackgroundTransparency = 1
+            }), "Stroke")
+            Create("UICorner", sliderBar, {CornerRadius = UDim.new(0, 2)})
+            Tween(sliderBar, "Size", UDim2.new(1, -60, 0, 4), 0.4, Enum.EasingStyle.Back)
+            Tween(sliderBar, "BackgroundTransparency", 0.3, 0.4, Enum.EasingStyle.Sine)
 
-        local valueLabel = InsertTheme(Create("TextLabel", frame, {
-            Size = UDim2.new(0, 0, 0, 20),
-            Position = UDim2.new(1, -10, 0, 0),
-            AnchorPoint = Vector2.new(1, 0),
-            Text = tostring(default),
-            Font = Enum.Font.GothamBold,
-            TextSize = 12,
-            BackgroundTransparency = 1,
-            TextTransparency = 1
-        }), "Text")
-        Tween(valueLabel, "Size", UDim2.new(0, 40, 0, 20), 0.3, Enum.EasingStyle.Back)
-        Tween(valueLabel, "TextTransparency", 0, 0.3, Enum.EasingStyle.Sine)
+            local fill = InsertTheme(Create("Frame", sliderBar, {
+                Size = UDim2.new((default - min) / (max - min), 0, 0, 0),
+                BackgroundColor3 = Theme["Color Accent"],
+                BackgroundTransparency = 1
+            }), "Accent")
+            Create("UICorner", fill, {CornerRadius = UDim.new(0, 2)})
+            Tween(fill, "Size", UDim2.new((default - min) / (max - min), 0, 1, 0), 0.4, Enum.EasingStyle.Quad)
+            Tween(fill, "BackgroundTransparency", 0, 0.4, Enum.EasingStyle.Sine)
 
-        local sliderBar = InsertTheme(Create("Frame", frame, {
-            Size = UDim2.new(0, 0, 0, 4),
-            Position = UDim2.new(0, 5, 0, 30),
-            BackgroundColor3 = Theme["Color Stroke"],
-            BackgroundTransparency = 1
-        }), "Stroke")
-        Create("UICorner", sliderBar, {CornerRadius = UDim.new(0, 2)})
-        Tween(sliderBar, "Size", UDim2.new(1, -60, 0, 4), 0.4, Enum.EasingStyle.Back)
-        Tween(sliderBar, "BackgroundTransparency", 0.3, 0.4, Enum.EasingStyle.Sine)
+            local knob = InsertTheme(Create("Frame", sliderBar, {
+                Size = UDim2.new(0, 0, 0, 12),
+                Position = UDim2.new((default - min) / (max - min), 0, 0.5, 0),
+                AnchorPoint = Vector2.new(0.5, 0.5),
+                BackgroundColor3 = Theme["Color Accent"],
+                BackgroundTransparency = 1
+            }), "Accent")
+            Create("UICorner", knob, {CornerRadius = UDim.new(0, 6)})
+            Tween(knob, "Size", UDim2.new(0, 12, 0, 12), 0.3, Enum.EasingStyle.Back)
+            Tween(knob, "BackgroundTransparency", 0, 0.3, Enum.EasingStyle.Sine)
 
-        local fill = InsertTheme(Create("Frame", sliderBar, {
-            Size = UDim2.new((default - min) / (max - min), 0, 0, 0),
-            BackgroundColor3 = Theme["Color Accent"],
-            BackgroundTransparency = 1
-        }), "Accent")
-        Create("UICorner", fill, {CornerRadius = UDim.new(0, 2)})
-        Tween(fill, "Size", UDim2.new((default - min) / (max - min), 0, 1, 0), 0.4, Enum.EasingStyle.Quad)
-        Tween(fill, "BackgroundTransparency", 0, 0.4, Enum.EasingStyle.Sine)
+            local dragging
+            sliderBar.InputBegan:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                    dragging = true
+                    Tween(knob, "Size", UDim2.new(0, 14, 0, 14), 0.2, Enum.EasingStyle.Quad)
+                    Tween(sliderBar, "BackgroundTransparency", 0.1, 0.2)
+                end
+            end)
+            UserInputService.InputChanged:Connect(function(input)
+                if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+                    local pos = math.clamp((input.Position.X - sliderBar.AbsolutePosition.X) / sliderBar.AbsoluteSize.X, 0, 1)
+                    default = min + (max - min) * pos
+                    Tween(fill, "Size", UDim2.new(pos, 0, 1, 0), 0.1, Enum.EasingStyle.Sine)
+                    Tween(knob, "Position", UDim2.new(pos, 0, 0.5, 0), 0.1, Enum.EasingStyle.Sine)
+                    Tween(valueLabel, "TextTransparency", 1, 0.1)
+                    valueLabel.Text = math.floor(default)
+                    Tween(valueLabel, "TextTransparency", 0, 0.1)
+                    if flag then SetFlag(flag, default) end
+                    callback(default)
+                end
+            end)
+            UserInputService.InputEnded:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                    dragging = false
+                    Tween(knob, "Size", UDim2.new(0, 12, 0, 12), 0.2, Enum.EasingStyle.Quad)
+                    Tween(sliderBar, "BackgroundTransparency", 0.3, 0.2)
+                end
+            end)
 
-        local knob = InsertTheme(Create("Frame", sliderBar, {
-            Size = UDim2.new(0, 0, 0, 12),
-            Position = UDim2.new((default - min) / (max - min), 0, 0.5, 0),
-            AnchorPoint = Vector2.new(0.5, 0.5),
-            BackgroundColor3 = Theme["Color Accent"],
-            BackgroundTransparency = 1
-        }), "Accent")
-        Create("UICorner", knob, {CornerRadius = UDim.new(0, 6)})
-        Tween(knob, "Size", UDim2.new(0, 12, 0, 12), 0.3, Enum.EasingStyle.Back)
-        Tween(knob, "BackgroundTransparency", 0, 0.3, Enum.EasingStyle.Sine)
-
-        local dragging
-        sliderBar.InputBegan:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseButton1 then
-                dragging = true
-                Tween(knob, "Size", UDim2.new(0, 14, 0, 14), 0.2, Enum.EasingStyle.Quad)
-                Tween(sliderBar, "BackgroundTransparency", 0.1, 0.2)
-            end
-        end)
-        UserInputService.InputChanged:Connect(function(input)
-            if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-                local pos = math.clamp((input.Position.X - sliderBar.AbsolutePosition.X) / sliderBar.AbsoluteSize.X, 0, 1)
-                default = min + (max - min) * pos
-                Tween(fill, "Size", UDim2.new(pos, 0, 1, 0), 0.1, Enum.EasingStyle.Sine)
-                Tween(knob, "Position", UDim2.new(pos, 0, 0.5, 0), 0.1, Enum.EasingStyle.Sine)
-                Tween(valueLabel, "TextTransparency", 1, 0.1)
+            return {Set = function(val)
+                default = math.clamp(val, min, max)
+                Tween(fill, "Size", UDim2.new((default - min) / (max - min), 0, 1, 0), 0.3, Enum.EasingStyle.Quad)
+                Tween(knob, "Position", UDim2.new((default - min) / (max - min), 0, 0.5, 0), 0.3, Enum.EasingStyle.Quad)
+                Tween(valueLabel, "TextTransparency", 1, 0.2)
                 valueLabel.Text = math.floor(default)
-                Tween(valueLabel, "TextTransparency", 0, 0.1)
-                if flag then SetFlag(flag, default) end
-                callback(default)
-            end
-        end)
-        UserInputService.InputEnded:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseButton1 then
-                dragging = false
-                Tween(knob, "Size", UDim2.new(0, 12, 0, 12), 0.2, Enum.EasingStyle.Quad)
-                Tween(sliderBar, "BackgroundTransparency", 0.3, 0.2)
-            end
-        end)
+                Tween(valueLabel, "TextTransparency", 0, 0.2)
+            end}
+        end
 
-        return {Set = function(val)
-            default = math.clamp(val, min, max)
-            Tween(fill, "Size", UDim2.new((default - min) / (max - min), 0, 1, 0), 0.3, Enum.EasingStyle.Quad)
-            Tween(knob, "Position", UDim2.new((default - min) / (max - min), 0, 0.5, 0), 0.3, Enum.EasingStyle.Quad)
-            Tween(valueLabel, "TextTransparency", 1, 0.2)
-            valueLabel.Text = math.floor(default)
-            Tween(valueLabel, "TextTransparency", 0, 0.2)
-        end}
+        return tab
     end
 
-    return tab
+    function window:Destroy()
+        Tween(mainFrame, "Size", UDim2.new(0, 550, 0, 0), 0.5, Enum.EasingStyle.Quad)
+        Tween(mainFrame, "BackgroundTransparency", 1, 0.5, Enum.EasingStyle.Sine)
+        task.delay(0.5, function() screenGui:Destroy() end)
+    end
+
+    return window
 end
+
+return NexusLib
